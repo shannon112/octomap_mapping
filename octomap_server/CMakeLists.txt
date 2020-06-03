@@ -70,20 +70,27 @@ set(LINK_LIBS
 #target_link_libraries(octomap_tracking_server_node ${PROJECT_NAME} ${LINK_LIBS})
 
 # ===================================================
-# Pointcloud server
+# Pointcloud  (local map optimizer)
 # ===================================================
-add_library(${PROJECT_NAME}_pc src/PointcloudServer.cpp )
-target_link_libraries(${PROJECT_NAME}_pc ${LINK_LIBS})
-add_dependencies(${PROJECT_NAME}_pc ${PROJECT_NAME}_gencfg)
-target_compile_definitions(${PROJECT_NAME}_pc PUBLIC COLOR_OCTOMAP_SERVER)
+add_library(Submap3dServer src/Submap3dServer.cpp )
+target_link_libraries(Submap3dServer ${LINK_LIBS})
+add_dependencies(Submap3dServer ${PROJECT_NAME}_gencfg)
+target_compile_definitions(Submap3dServer PUBLIC COLOR_OCTOMAP_SERVER)
 
 # point_cloud_stiching
-add_executable(point_cloud_stiching_node src/point_cloud_stiching.cpp)
-target_link_libraries(point_cloud_stiching_node ${PROJECT_NAME}_pc ${LINK_LIBS})
+add_executable(submap3d_server_node src/submap3d_server.cpp)
+target_link_libraries(submap3d_server_node Submap3dServer ${LINK_LIBS})
 
-# octomap_saver
-add_executable(octomap_saver src/octomap_saver.cpp)
-target_link_libraries(octomap_saver ${PROJECT_NAME}_pc ${LINK_LIBS})
+# ===================================================
+# Pointcloud  (local map visualizer)
+# ===================================================
+add_library(Submap3dVisualizer src/Submap3dVisualizer.cpp)
+target_link_libraries(Submap3dVisualizer ${LINK_LIBS})
+add_dependencies(Submap3dVisualizer ${PROJECT_NAME}_gencfg)
+
+# octomap_server_node
+add_executable(submap3d_visualizer_node src/submap3d_visualizer.cpp)
+target_link_libraries(submap3d_visualizer_node Submap3dVisualizer ${LINK_LIBS})
 
 # ===================================================
 # Octomap color server

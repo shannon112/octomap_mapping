@@ -38,6 +38,9 @@
 // #include <moveit_msgs/CollisionObject.h>
 // #include <moveit_msgs/CollisionMap.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <std_srvs/Empty.h>
 #include <dynamic_reconfigure/server.h>
 #include <octomap_server/OctomapServerConfig.h>
@@ -87,6 +90,8 @@ public:
 #endif
   typedef octomap_msgs::GetOctomap OctomapSrv;
   typedef octomap_msgs::BoundingBoxQuery BBXSrv;
+  typedef geometry_msgs::PoseArray PoseArray;
+  typedef geometry_msgs::Pose Pose;
 
   OctomapServer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
   virtual ~OctomapServer();
@@ -96,6 +101,7 @@ public:
   bool resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
+  virtual void insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
   virtual bool openFile(const std::string& filename);
 
 protected:
@@ -124,6 +130,7 @@ protected:
   void publishBinaryOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   virtual void publishAll(const ros::Time& rostime = ros::Time::now());
+  virtual void publishSubmap3d(const ros::Time& rostime = ros::Time::now());
 
   /**
   * @brief update occupancy map with a scan labeled as ground and nonground.
@@ -200,9 +207,11 @@ protected:
   static std_msgs::ColorRGBA heightMapColor(double h);
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
-  ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub;
+  ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub, m_posePub, m_submap3dPub;
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
+  message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
+  tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseArraySub;
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;
   boost::recursive_mutex m_config_mutex;
@@ -258,6 +267,13 @@ protected:
   unsigned m_multires2DScale;
   bool m_projectCompleteMap;
   bool m_useColoredMap;
+
+  // pose array
+  unsigned m_SizePoses;
+  Pose last_pose;
+  std::vector<Pose> m_Poses;
+  PCLPointCloud* m_local_pc_map;
+  std::vector<PCLPointCloud*> m_local_pc_maps;
 };
 }
 

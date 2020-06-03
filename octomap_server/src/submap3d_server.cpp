@@ -45,7 +45,7 @@
 using namespace octomap_server;
 
 int main(int argc, char** argv){
-  ros::init(argc, argv, "point_cloud_stiching");
+  ros::init(argc, argv, "submap3d_server");
   const ros::NodeHandle nh;
   const ros::NodeHandle private_nh("~");
   std::string mapFilename(""), mapFilenameParam("");

@@ -1,4 +1,4 @@
-#include <octomap_server/OctomapServer.h>
+#include <octomap_server/Submap3dServer.h>
 #include <sstream>
 
 using namespace octomap;
@@ -266,16 +266,16 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
     Eigen::Matrix4f worldToLocalMap;
     // the first submap_0 ref to origin, trigger at PoseArray[0]
     if (m_SizePoses == 0){
-      worldToLocalMapTf = tf::Transform( tf::Quaternion(0,0,0,1) , tf::Vector3(0,0,0) );
+      //worldToLocalMapTf = tf::Transform( tf::Quaternion(0,0,0,1) , tf::Vector3(0,0,0) );
     // the second submap_1 ref to m_Poses[0], trigger at PoseArray[1]
     }else{
       last_pose = pose_array->poses[m_SizePoses-1];
       m_Poses.push_back(last_pose);
-      worldToLocalMapTf = tf::Transform( tf::Quaternion(last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w) , tf::Vector3(last_pose.position.x, last_pose.position.y, last_pose.position.z) );
+      //worldToLocalMapTf = tf::Transform( tf::Quaternion(last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w) , tf::Vector3(last_pose.position.x, last_pose.position.y, last_pose.position.z) );
       ROS_DEBUG("Last submap pose xyz = (%f,%f,%f), xyzw = (%f,%f,%f,%f)", last_pose.position.x, last_pose.position.y, last_pose.position.z, last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w);
     }
-    pcl_ros::transformAsMatrix(worldToLocalMapTf, worldToLocalMap);    
-    pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, worldToLocalMap);
+    //pcl_ros::transformAsMatrix(worldToLocalMapTf, worldToLocalMap);    
+    //pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, worldToLocalMap);
     m_local_pc_maps.push_back(m_local_pc_map); 
 
     //publish submap3d_list (m_local_pc_maps pair with poses)
@@ -455,27 +455,18 @@ void OctomapServer::publishSubmap3d(const ros::Time& rostime){
   std::stringstream frame_id_now; 
   int index_now = (int)(m_SizePoses-1);
   frame_id_now << "submap3d_" << index_now;
-
-  // finish pointcloud:
-  if (publishPointCloud){
-    sensor_msgs::PointCloud2 cloud;
-    pcl::toROSMsg (*m_local_pc_map, cloud);
-    cloud.header.frame_id = frame_id_now.str();
-    cloud.header.stamp = rostime;
-    m_pointCloudPub.publish(cloud);
-  }
   
   if (publishSubmap3d){
     sensor_msgs::PointCloud2 cloud;
     pcl::toROSMsg (*m_local_pc_map, cloud);
-    cloud.header.frame_id = frame_id_now.str();
+    cloud.header.frame_id = m_worldFrameId;//frame_id_now.str();
     cloud.header.stamp = rostime;
     m_submap3dPub.publish(cloud);
   }
 
   if (publishPose){
     geometry_msgs::PoseStamped poseS;
-    poseS.header.frame_id = frame_id_now.str();
+    poseS.header.frame_id = m_worldFrameId;//frame_id_now.str();
     poseS.header.stamp = rostime;
     poseS.pose = last_pose;
     m_posePub.publish(poseS);
