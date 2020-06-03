@@ -4,6 +4,7 @@ project(octomap_server)
 set(PACKAGE_DEPENDENCIES
   roscpp
   visualization_msgs
+  geometry_msgs
   sensor_msgs
   pcl_ros
   pcl_conversions
@@ -15,7 +16,6 @@ set(PACKAGE_DEPENDENCIES
   dynamic_reconfigure
   nodelet
 )
-
 
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})
 
@@ -42,68 +42,100 @@ set(LINK_LIBS
   ${catkin_LIBRARIES}
 )
 
-add_library(${PROJECT_NAME} src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
-target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
-add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_gencfg)
+# ===================================================
+# Octomap server
+# ===================================================
+#add_library(${PROJECT_NAME} src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
+#target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
+#add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_gencfg)
 
-add_library(${PROJECT_NAME}_color src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
-target_link_libraries(${PROJECT_NAME}_color ${LINK_LIBS})
-add_dependencies(${PROJECT_NAME}_color ${PROJECT_NAME}_gencfg)
-target_compile_definitions(${PROJECT_NAME}_color PUBLIC COLOR_OCTOMAP_SERVER)
+# octomap_server_node
+#add_executable(octomap_server_node src/octomap_server_node.cpp)
+#target_link_libraries(octomap_server_node ${PROJECT_NAME} ${LINK_LIBS})
 
-add_executable(octomap_server_node src/octomap_server_node.cpp)
-target_link_libraries(octomap_server_node ${PROJECT_NAME} ${LINK_LIBS})
+# octomap_server_static
+#add_executable(octomap_server_static src/octomap_server_static.cpp)
+#target_link_libraries(octomap_server_static ${PROJECT_NAME} ${LINK_LIBS})
 
-add_executable(octomap_color_server_node src/octomap_server_node.cpp)
-target_link_libraries(octomap_color_server_node ${PROJECT_NAME}_color ${LINK_LIBS})
+# octomap_server_multilayer
+#add_executable(octomap_server_multilayer src/octomap_server_multilayer.cpp)
+#target_link_libraries(octomap_server_multilayer ${PROJECT_NAME} ${LINK_LIBS})
 
-add_executable(octomap_server_static src/octomap_server_static.cpp)
-target_link_libraries(octomap_server_static ${PROJECT_NAME} ${LINK_LIBS})
+# octomap_saver
+#add_executable(octomap_saver src/octomap_saver.cpp)
+#target_link_libraries(octomap_saver ${PROJECT_NAME} ${LINK_LIBS})
 
-add_executable(octomap_server_multilayer src/octomap_server_multilayer.cpp)
-target_link_libraries(octomap_server_multilayer ${PROJECT_NAME} ${LINK_LIBS})
+# octomap_tracking
+#add_executable(octomap_tracking_server_node src/octomap_tracking_server_node.cpp)
+#target_link_libraries(octomap_tracking_server_node ${PROJECT_NAME} ${LINK_LIBS})
 
+# ===================================================
+# Pointcloud server
+# ===================================================
+add_library(${PROJECT_NAME}_pc src/PointcloudServer.cpp )
+target_link_libraries(${PROJECT_NAME}_pc ${LINK_LIBS})
+add_dependencies(${PROJECT_NAME}_pc ${PROJECT_NAME}_gencfg)
+target_compile_definitions(${PROJECT_NAME}_pc PUBLIC COLOR_OCTOMAP_SERVER)
+
+# point_cloud_stiching
+add_executable(point_cloud_stiching_node src/point_cloud_stiching.cpp)
+target_link_libraries(point_cloud_stiching_node ${PROJECT_NAME}_pc ${LINK_LIBS})
+
+# octomap_saver
 add_executable(octomap_saver src/octomap_saver.cpp)
-target_link_libraries(octomap_saver ${PROJECT_NAME} ${LINK_LIBS})
+target_link_libraries(octomap_saver ${PROJECT_NAME}_pc ${LINK_LIBS})
 
-add_executable(octomap_tracking_server_node src/octomap_tracking_server_node.cpp)
-target_link_libraries(octomap_tracking_server_node ${PROJECT_NAME} ${LINK_LIBS})
+# ===================================================
+# Octomap color server
+# ===================================================
+#add_library(${PROJECT_NAME}_color src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
+#target_link_libraries(${PROJECT_NAME}_color ${LINK_LIBS})
+#add_dependencies(${PROJECT_NAME}_color ${PROJECT_NAME}_gencfg)
+#target_compile_definitions(${PROJECT_NAME}_color PUBLIC COLOR_OCTOMAP_SERVER)
 
+# octomap_color_server_node
+#add_executable(octomap_color_server_node src/octomap_server_node.cpp)
+#target_link_libraries(octomap_color_server_node ${PROJECT_NAME}_color ${LINK_LIBS})
+
+# ===================================================
 # Nodelet
-add_library(octomap_server_nodelet src/octomap_server_nodelet.cpp)
-target_link_libraries(octomap_server_nodelet ${PROJECT_NAME} ${LINK_LIBS})
+# ===================================================
+# add_library(octomap_server_nodelet src/octomap_server_nodelet.cpp)
+# target_link_libraries(octomap_server_nodelet ${PROJECT_NAME} ${LINK_LIBS})
 
-add_library(octomap_color_server_nodelet src/octomap_server_nodelet.cpp)
-target_link_libraries(octomap_color_server_nodelet ${PROJECT_NAME}_color ${LINK_LIBS})
+# add_library(octomap_color_server_nodelet src/octomap_server_nodelet.cpp)
+# target_link_libraries(octomap_color_server_nodelet ${PROJECT_NAME}_color ${LINK_LIBS})
 
+# ===================================================
 # install targets:
-install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_color
-  octomap_server_node
-  octomap_color_server_node
-  octomap_server_static
-  octomap_server_multilayer
-  octomap_saver
-  octomap_tracking_server_node
-  octomap_server_nodelet
-  octomap_color_server_nodelet
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+# ===================================================
+# install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_color
+#   octomap_server_node
+#   octomap_color_server_node
+#   octomap_server_static
+#   octomap_server_multilayer
+#   octomap_saver
+#   octomap_tracking_server_node
+#   octomap_server_nodelet
+#   octomap_color_server_nodelet
+#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# )
 
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
-)
+# install(DIRECTORY include/${PROJECT_NAME}/
+#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+#   FILES_MATCHING PATTERN "*.h"
+#   PATTERN ".svn" EXCLUDE
+# )
 
-install(DIRECTORY launch/
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
-  PATTERN ".svn" EXCLUDE
-)
+# install(DIRECTORY launch/
+#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+#   PATTERN ".svn" EXCLUDE
+# )
 
-install(FILES 
-  nodelet_plugins.xml
-  color_nodelet_plugins.xml
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
+# install(FILES 
+#   nodelet_plugins.xml
+#   color_nodelet_plugins.xml
+#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+# )
