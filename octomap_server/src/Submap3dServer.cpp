@@ -261,42 +261,11 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
   ros::WallTime startTime = ros::WallTime::now();
   ros::Time latest_pa_stamp = pose_array->header.stamp;
 
-  if (pose_array->poses.size() > m_SizePoses){
-    // transform m_local_pc_map from global frame to local
-    tf::Transform worldToLocalMapTf;
-    Eigen::Matrix4f worldToLocalMap;
-    
-    // the first submap_0 ref to origin, trigger at PoseArray[0]
-    if (m_SizePoses == 0){
-      last_pose = geometry_msgs::Pose();
-      //worldToLocalMapTf = tf::Transform( tf::Quaternion(0,0,0,1) , tf::Vector3(0,0,0) );
-    
-    // the second submap_1 ref to m_Poses[0], trigger at PoseArray[1]
-    }else{
-      last_pose = pose_array->poses[m_SizePoses-1];
-      /*
-      tf::StampedTransform sensorToWorldTf;
-      try {
-        m_tfListener.lookupTransform(m_baseFrameId, m_trackingFrameId, pose_array->header.stamp, sensorToWorldTf);
-      } catch(tf::TransformException& ex){
-        ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
-        return;
-      }
-      ROS_INFO("%f %f %f, %f %f %f %f",sensorToWorldTf.getOrigin().x(), sensorToWorldTf.getOrigin().y(), sensorToWorldTf.getOrigin().z(),
-            sensorToWorldTf.getRotation().x(), sensorToWorldTf.getRotation().y(), sensorToWorldTf.getRotation().z(), sensorToWorldTf.getRotation().w());
-      last_pose.position.x -= sensorToWorldTf.getRotation().x();
-      last_pose.position.y -= sensorToWorldTf.getRotation().y();
-      last_pose.position.z -= sensorToWorldTf.getRotation().z();
-      */
-      m_Poses.push_back(last_pose);
-      //worldToLocalMapTf = tf::Transform( tf::Quaternion(last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w) , tf::Vector3(last_pose.position.x, last_pose.position.y, last_pose.position.z) );
-      //ROS_DEBUG("Last submap pose xyz = (%f,%f,%f), xyzw = (%f,%f,%f,%f)", last_pose.position.x, last_pose.position.y, last_pose.position.z, last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w);
-    }
-    //pcl_ros::transformAsMatrix(worldToLocalMapTf, worldToLocalMap);    
-    //pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, worldToLocalMap);
+  if (pose_array->poses.size() > m_SizePoses){    
+    m_SizePoses = pose_array->poses.size();
+    last_pose = pose_array->poses[m_SizePoses-1];
 
-
-    // voxel filter
+    // voxel filter to submap3d
     pcl::VoxelGrid<PCLPoint> voxel_filter;
     voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
     PCLPointCloud::Ptr temp (new PCLPointCloud);
@@ -305,13 +274,14 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
     temp->swap(*m_local_pc_map);
     ROS_INFO("Pointcloud final pub (%zu pts (local_pc_map))", m_local_pc_map->size());
 
+    // store pose and submap pair
     m_local_pc_maps.push_back(m_local_pc_map); 
+    m_Poses.push_back(last_pose);
 
-    //publish submap3d_list (m_local_pc_maps pair with poses)
+    //publish submap3d_list (submap pair with pose)
     publishSubmap3d(latest_pa_stamp);
 
     // update to new cycle
-    m_SizePoses = pose_array->poses.size(); // update current poses num
     m_local_pc_map = new PCLPointCloud; // give new submap3d
     ROS_INFO("Receive new pose!! PoseArray len = %d, m_local_pc_map len = %d, m_Poses len = %d", (int)m_SizePoses, (int)m_local_pc_maps.size(), (int)m_Poses.size());
   }
@@ -490,7 +460,7 @@ void OctomapServer::publishSubmap3d(const ros::Time& rostime){
   bool publishPointCloud = (m_latchedTopics || m_pointCloudPub.getNumSubscribers() > 0);
 
   std::stringstream frame_id_now; 
-  int index_now = (int)(m_SizePoses-1);
+  int index_now = (int)(m_SizePoses); // start from 1 = corresponding len of pose array
   frame_id_now << "submap3d_" << index_now;
   
   if (publishSubmap3d){
