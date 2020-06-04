@@ -55,6 +55,8 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/statistical_outlier_removal.h>
 
 
 #include <tf/transform_listener.h>
@@ -223,8 +225,9 @@ protected:
   octomap::OcTreeKey m_updateBBXMax;
 
   double m_maxRange;
-  std::string m_worldFrameId; // the map frame
-  std::string m_baseFrameId; // base of the robot for ground plane filtering
+  std::string m_worldFrameId; // the carto map_frame
+  std::string m_baseFrameId; // the carto tracking_frame
+  std::string m_trackingFrameId; // the carto published_frame
   bool m_useHeightMap;
   std_msgs::ColorRGBA m_color;
   std_msgs::ColorRGBA m_colorFree;

@@ -24,7 +24,9 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_local_pc_map(new PCLPointCloud),
   m_octree(NULL),
   m_maxRange(-1.0),
-  m_worldFrameId("/map"), m_baseFrameId("base_footprint"),
+  m_worldFrameId("/map"), 
+  m_baseFrameId("base_footprint"),
+  m_trackingFrameId("imu_link"),
   m_useHeightMap(true),
   m_useColoredMap(false),
   m_colorFactor(0.8),
@@ -257,29 +259,56 @@ bool OctomapServer::openFile(const std::string& filename){
 // pose_array input callback
 void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
   ros::WallTime startTime = ros::WallTime::now();
-  //ROS_INFO("PoseArray timestamp %f sec)", pose_array->header.stamp.toSec());
+  ros::Time latest_pa_stamp = pose_array->header.stamp;
 
   if (pose_array->poses.size() > m_SizePoses){
-
     // transform m_local_pc_map from global frame to local
     tf::Transform worldToLocalMapTf;
     Eigen::Matrix4f worldToLocalMap;
+    
     // the first submap_0 ref to origin, trigger at PoseArray[0]
     if (m_SizePoses == 0){
+      last_pose = geometry_msgs::Pose();
       //worldToLocalMapTf = tf::Transform( tf::Quaternion(0,0,0,1) , tf::Vector3(0,0,0) );
+    
     // the second submap_1 ref to m_Poses[0], trigger at PoseArray[1]
     }else{
       last_pose = pose_array->poses[m_SizePoses-1];
+      /*
+      tf::StampedTransform sensorToWorldTf;
+      try {
+        m_tfListener.lookupTransform(m_baseFrameId, m_trackingFrameId, pose_array->header.stamp, sensorToWorldTf);
+      } catch(tf::TransformException& ex){
+        ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
+        return;
+      }
+      ROS_INFO("%f %f %f, %f %f %f %f",sensorToWorldTf.getOrigin().x(), sensorToWorldTf.getOrigin().y(), sensorToWorldTf.getOrigin().z(),
+            sensorToWorldTf.getRotation().x(), sensorToWorldTf.getRotation().y(), sensorToWorldTf.getRotation().z(), sensorToWorldTf.getRotation().w());
+      last_pose.position.x -= sensorToWorldTf.getRotation().x();
+      last_pose.position.y -= sensorToWorldTf.getRotation().y();
+      last_pose.position.z -= sensorToWorldTf.getRotation().z();
+      */
       m_Poses.push_back(last_pose);
       //worldToLocalMapTf = tf::Transform( tf::Quaternion(last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w) , tf::Vector3(last_pose.position.x, last_pose.position.y, last_pose.position.z) );
-      ROS_DEBUG("Last submap pose xyz = (%f,%f,%f), xyzw = (%f,%f,%f,%f)", last_pose.position.x, last_pose.position.y, last_pose.position.z, last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w);
+      //ROS_DEBUG("Last submap pose xyz = (%f,%f,%f), xyzw = (%f,%f,%f,%f)", last_pose.position.x, last_pose.position.y, last_pose.position.z, last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w);
     }
     //pcl_ros::transformAsMatrix(worldToLocalMapTf, worldToLocalMap);    
     //pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, worldToLocalMap);
+
+
+    // voxel filter
+    pcl::VoxelGrid<PCLPoint> voxel_filter;
+    voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
+    PCLPointCloud::Ptr temp (new PCLPointCloud);
+    voxel_filter.setInputCloud((*m_local_pc_map).makeShared());
+    voxel_filter.filter(*temp);
+    temp->swap(*m_local_pc_map);
+    ROS_INFO("Pointcloud final pub (%zu pts (local_pc_map))", m_local_pc_map->size());
+
     m_local_pc_maps.push_back(m_local_pc_map); 
 
     //publish submap3d_list (m_local_pc_maps pair with poses)
-    publishSubmap3d(pose_array->header.stamp);
+    publishSubmap3d(latest_pa_stamp);
 
     // update to new cycle
     m_SizePoses = pose_array->poses.size(); // update current poses num
@@ -293,7 +322,7 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
 // pointcloud input callback
 void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
   ros::WallTime startTime = ros::WallTime::now();
-  ROS_INFO("Pointcloud timestamp %f sec", cloud->header.stamp.toSec());
+  ros::Time latest_pc_stamp = cloud->header.stamp;
 
   // transform pc from cloud frame to global frame
   PCLPointCloud pc;
@@ -309,8 +338,16 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
   pcl::transformPointCloud(pc, pc, sensorToWorld);
 
+  //statistical filter, filtering outlier
+  PCLPointCloud::Ptr temp (new PCLPointCloud);
+  pcl::StatisticalOutlierRemoval<PCLPoint> statistical_filter;
+  statistical_filter.setMeanK(50);
+  statistical_filter.setStddevMulThresh(1.0);
+  statistical_filter.setInputCloud(pc.makeShared());
+  statistical_filter.filter(*temp);
+
   //accumulate pc to build a local pc map  ref to global frame
-  *m_local_pc_map += pc;
+  *m_local_pc_map += *temp;
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("Pointcloud insertion in OctomapServer done (%zu/%zu pts (pc/local_pc_map), %f sec)", pc.size(), m_local_pc_map->size(), total_elapsed);
@@ -459,20 +496,21 @@ void OctomapServer::publishSubmap3d(const ros::Time& rostime){
   if (publishSubmap3d){
     sensor_msgs::PointCloud2 cloud;
     pcl::toROSMsg (*m_local_pc_map, cloud);
-    cloud.header.frame_id = m_worldFrameId;//frame_id_now.str();
+    cloud.header.frame_id = m_worldFrameId;//frame_id_now.str();//
     cloud.header.stamp = rostime;
     m_submap3dPub.publish(cloud);
+    ROS_INFO("Published maps");
   }
 
   if (publishPose){
     geometry_msgs::PoseStamped poseS;
-    poseS.header.frame_id = m_worldFrameId;//frame_id_now.str();
+    poseS.header.frame_id = frame_id_now.str();//m_worldFrameId;//
     poseS.header.stamp = rostime;
     poseS.pose = last_pose;
     m_posePub.publish(poseS);
+    ROS_INFO("Published poses");
   }
 
-  ROS_INFO("Published poses and maps");
 }
 
 void OctomapServer::publishAll(const ros::Time& rostime){

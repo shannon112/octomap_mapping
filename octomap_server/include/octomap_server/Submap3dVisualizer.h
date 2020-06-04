@@ -102,6 +102,7 @@ public:
 
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
   virtual void insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
+  virtual void insertSubmap3dposeCallback(const geometry_msgs::PoseStamped::ConstPtr& pose);
   virtual bool openFile(const std::string& filename);
 
 protected:
@@ -210,8 +211,10 @@ protected:
   ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub, m_posePub, m_submap3dPub;
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
+  message_filters::Subscriber<geometry_msgs::PoseStamped>* m_poseStampedSub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
   tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseArraySub;
+  tf::MessageFilter<geometry_msgs::PoseStamped>* m_tfPoseStampedSub;
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;
   boost::recursive_mutex m_config_mutex;
@@ -274,6 +277,8 @@ protected:
   std::vector<Pose> m_Poses;
   PCLPointCloud* m_local_pc_map;
   std::vector<PCLPointCloud*> m_local_pc_maps;
+  PCLPointCloud* m_global_pc_map;
+  ros::WallTime previousTime;
 };
 }
 

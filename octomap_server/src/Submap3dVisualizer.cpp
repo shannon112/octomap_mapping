@@ -1,4 +1,4 @@
-#include <octomap_server/Submap3dServer.h>
+#include <octomap_server/Submap3dVisualizer.h>
 #include <sstream>
 
 using namespace octomap;
@@ -18,10 +18,12 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_poseArraySub(NULL),
   m_tfPointCloudSub(NULL),
   m_tfPoseArraySub(NULL),
+  m_tfPoseStampedSub(NULL),
   m_reconfigureServer(m_config_mutex, private_nh_),
 
   m_SizePoses(0),
   m_local_pc_map(new PCLPointCloud),
+  m_global_pc_map(new PCLPointCloud),
   m_octree(NULL),
   m_maxRange(-1.0),
   m_worldFrameId("/map"), m_baseFrameId("base_footprint"),
@@ -106,6 +108,8 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   }
 
   // initialize octomap object & params
+  previousTime = ros::WallTime::now();
+
   m_octree = new OcTreeT(m_res);
   m_octree->setProbHit(probHit);
   m_octree->setProbMiss(probMiss);
@@ -150,17 +154,20 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
   m_posePub = m_nh.advertise<geometry_msgs::PoseStamped>("submap3d_pose", 1, m_latchedTopics);
-  m_submap3dPub = m_nh.advertise<sensor_msgs::PointCloud2>("submap3d_map", 1, m_latchedTopics);
+  m_submap3dPub = m_nh.advertise<sensor_msgs::PointCloud2>("map3d", 1, m_latchedTopics);
 
   // subscriber
-  m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
+  m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "submap3d_map", 5);
   m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
+  m_poseStampedSub = new message_filters::Subscriber<geometry_msgs::PoseStamped> (m_nh, "submap3d_pose", 5);
 
   // tf listener
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
   m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServer::insertCloudCallback, this, _1));
   m_tfPoseArraySub = new tf::MessageFilter<geometry_msgs::PoseArray> (*m_poseArraySub, m_tfListener, m_worldFrameId, 5);
   m_tfPoseArraySub->registerCallback(boost::bind(&OctomapServer::insertSubmap3dCallback, this, _1));
+  m_tfPoseStampedSub = new tf::MessageFilter<geometry_msgs::PoseStamped> (*m_poseStampedSub, m_tfListener, m_worldFrameId, 5);
+  m_tfPoseStampedSub->registerCallback(boost::bind(&OctomapServer::insertSubmap3dposeCallback, this, _1));
 
   // service
   m_octomapBinaryService = m_nh.advertiseService("octomap_binary", &OctomapServer::octomapBinarySrv, this);
@@ -192,6 +199,11 @@ OctomapServer::~OctomapServer(){
   if (m_tfPoseArraySub){
     delete m_tfPoseArraySub;
     m_tfPoseArraySub = NULL;
+  }
+
+  if (m_tfPoseStampedSub){
+    delete m_tfPoseStampedSub;
+    m_tfPoseStampedSub = NULL;
   }
 
   if (m_octree){
@@ -254,67 +266,35 @@ bool OctomapServer::openFile(const std::string& filename){
 
 }
 
+// posestamped input callback
+void OctomapServer::insertSubmap3dposeCallback(const geometry_msgs::PoseStamped::ConstPtr& pose){
+  ros::WallTime startTime = ros::WallTime::now();
+  ROS_INFO("Get pose %s", pose->header.frame_id.c_str());
+  return;
+}
+
 // pose_array input callback
 void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
   ros::WallTime startTime = ros::WallTime::now();
-  //ROS_INFO("PoseArray timestamp %f sec)", pose_array->header.stamp.toSec());
-
-  if (pose_array->poses.size() > m_SizePoses){
-
-    // transform m_local_pc_map from global frame to local
-    tf::Transform worldToLocalMapTf;
-    Eigen::Matrix4f worldToLocalMap;
-    // the first submap_0 ref to origin, trigger at PoseArray[0]
-    if (m_SizePoses == 0){
-      //worldToLocalMapTf = tf::Transform( tf::Quaternion(0,0,0,1) , tf::Vector3(0,0,0) );
-    // the second submap_1 ref to m_Poses[0], trigger at PoseArray[1]
-    }else{
-      last_pose = pose_array->poses[m_SizePoses-1];
-      m_Poses.push_back(last_pose);
-      //worldToLocalMapTf = tf::Transform( tf::Quaternion(last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w) , tf::Vector3(last_pose.position.x, last_pose.position.y, last_pose.position.z) );
-      ROS_DEBUG("Last submap pose xyz = (%f,%f,%f), xyzw = (%f,%f,%f,%f)", last_pose.position.x, last_pose.position.y, last_pose.position.z, last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z, last_pose.orientation.w);
-    }
-    //pcl_ros::transformAsMatrix(worldToLocalMapTf, worldToLocalMap);    
-    //pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, worldToLocalMap);
-    m_local_pc_maps.push_back(m_local_pc_map); 
-
-    //publish submap3d_list (m_local_pc_maps pair with poses)
-    publishSubmap3d(pose_array->header.stamp);
-
-    // update to new cycle
-    m_SizePoses = pose_array->poses.size(); // update current poses num
-    m_local_pc_map = new PCLPointCloud; // give new submap3d
-    ROS_INFO("Receive new pose!! PoseArray len = %d, m_local_pc_map len = %d, m_Poses len = %d", (int)m_SizePoses, (int)m_local_pc_maps.size(), (int)m_Poses.size());
-  }
-
+  ROS_INFO("Get pose array sized %zu", pose_array->poses.size());
   return;
 }
 
 // pointcloud input callback
 void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
   ros::WallTime startTime = ros::WallTime::now();
-  ROS_INFO("Pointcloud timestamp %f sec", cloud->header.stamp.toSec());
-
-  // transform pc from cloud frame to global frame
   PCLPointCloud pc;
   pcl::fromROSMsg(*cloud, pc);
-  tf::StampedTransform sensorToWorldTf;
-  try {
-    m_tfListener.lookupTransform(m_worldFrameId, cloud->header.frame_id, cloud->header.stamp, sensorToWorldTf);
-  } catch(tf::TransformException& ex){
-    ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
-    return;
-  }
-  Eigen::Matrix4f sensorToWorld;
-  pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
-  pcl::transformPointCloud(pc, pc, sensorToWorld);
+  ROS_INFO("Processing submap3d %s, %zu pts", cloud->header.frame_id.c_str(), pc.size());
 
-  //accumulate pc to build a local pc map  ref to global frame
-  *m_local_pc_map += pc;
+  *m_global_pc_map += pc;
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  ROS_INFO("Pointcloud insertion in OctomapServer done (%zu/%zu pts (pc/local_pc_map), %f sec)", pc.size(), m_local_pc_map->size(), total_elapsed);
-
+  if ((ros::WallTime::now()-previousTime).toSec() > 2){
+    ROS_INFO("Pointcloud insertion in OctomapServer done (%zu pts (global_pc_map), %f sec)", m_global_pc_map->size(), total_elapsed);
+    publishSubmap3d(cloud->header.stamp);
+    previousTime = ros::WallTime::now();
+  }
   return;
 }
 
@@ -447,32 +427,16 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 
 // publish stored poses and optimized local submap
 void OctomapServer::publishSubmap3d(const ros::Time& rostime){
-  ros::WallTime startTime = ros::WallTime::now();
   bool publishSubmap3d = (m_latchedTopics || m_submap3dPub.getNumSubscribers() > 0);
-  bool publishPose = (m_latchedTopics || m_posePub.getNumSubscribers() > 0);
-  bool publishPointCloud = (m_latchedTopics || m_pointCloudPub.getNumSubscribers() > 0);
-
-  std::stringstream frame_id_now; 
-  int index_now = (int)(m_SizePoses-1);
-  frame_id_now << "submap3d_" << index_now;
   
   if (publishSubmap3d){
     sensor_msgs::PointCloud2 cloud;
-    pcl::toROSMsg (*m_local_pc_map, cloud);
-    cloud.header.frame_id = m_worldFrameId;//frame_id_now.str();
+    pcl::toROSMsg (*m_global_pc_map, cloud);
+    cloud.header.frame_id = m_worldFrameId;
     cloud.header.stamp = rostime;
     m_submap3dPub.publish(cloud);
   }
-
-  if (publishPose){
-    geometry_msgs::PoseStamped poseS;
-    poseS.header.frame_id = m_worldFrameId;//frame_id_now.str();
-    poseS.header.stamp = rostime;
-    poseS.pose = last_pose;
-    m_posePub.publish(poseS);
-  }
-
-  ROS_INFO("Published poses and maps");
+  ROS_INFO("Published global map");
 }
 
 void OctomapServer::publishAll(const ros::Time& rostime){
