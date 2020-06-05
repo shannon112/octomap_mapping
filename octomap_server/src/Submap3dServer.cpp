@@ -310,9 +310,34 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   ros::WallTime startTime = ros::WallTime::now();
   ros::Time latest_pc_stamp = cloud->header.stamp;
 
-  // transform pc from cloud frame to global frame
+  // transform cloud from ros to pcl
   PCLPointCloud pc;
   pcl::fromROSMsg(*cloud, pc);
+
+  //depth filter, as kinectv1 spec max depth range is around 3.5~4m, min is 0.8m
+  pcl::PassThrough<PCLPoint> pass_x;
+  pass_x.setFilterFieldName("x");
+  pass_x.setFilterLimits(-4, 4);
+  pcl::PassThrough<PCLPoint> pass_y;
+  pass_y.setFilterFieldName("y");
+  pass_y.setFilterLimits(-4, 4);
+  pcl::PassThrough<PCLPoint> pass_z_p;
+  pass_z_p.setFilterFieldName("z");
+  pass_z_p.setFilterLimits(-4, 4);
+  pcl::PassThrough<PCLPoint> pass_z_n;
+  pass_z_n.setFilterFieldName("z");
+  pass_z_n.setFilterLimits(-0.8, 0.8);
+  pass_z_n.setFilterLimitsNegative (true);
+  pass_x.setInputCloud(pc.makeShared());
+  pass_x.filter(pc);
+  pass_y.setInputCloud(pc.makeShared());
+  pass_y.filter(pc);
+  pass_z_p.setInputCloud(pc.makeShared());
+  pass_z_p.filter(pc);
+  pass_z_n.setInputCloud(pc.makeShared());
+  pass_z_n.filter(pc);
+
+  // transform pc from cloud frame to global frame
   tf::StampedTransform sensorToWorldTf;
   try {
     m_tfListener.lookupTransform(m_worldFrameId, cloud->header.frame_id, cloud->header.stamp, sensorToWorldTf);
