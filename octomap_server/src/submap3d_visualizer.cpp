@@ -1,5 +1,5 @@
 #include <ros/ros.h>
-#include <octomap_server/OctomapServer.h>
+#include <submap3d_visualizer/Submap3dVisualizer.h>
 
 #define USAGE "\nUSAGE: octomap_server <map.[bt|ot]>\n" \
         "  map.bt: inital octomap 3D map file to read\n"

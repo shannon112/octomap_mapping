@@ -1,4 +1,4 @@
-#include <octomap_server/Submap3dVisualizer.h>
+#include <submap3d_visualizer/Submap3dVisualizer.h>
 #include <sstream>
 
 using namespace octomap;
@@ -225,59 +225,6 @@ OctomapServer::~OctomapServer(){
 
 }
 
-bool OctomapServer::openFile(const std::string& filename){
-  if (filename.length() <= 3)
-    return false;
-
-  std::string suffix = filename.substr(filename.length()-3, 3);
-  if (suffix== ".bt"){
-    if (!m_octree->readBinary(filename)){
-      return false;
-    }
-  } else if (suffix == ".ot"){
-    AbstractOcTree* tree = AbstractOcTree::read(filename);
-    if (!tree){
-      return false;
-    }
-    if (m_octree){
-      delete m_octree;
-      m_octree = NULL;
-    }
-    m_octree = dynamic_cast<OcTreeT*>(tree);
-    if (!m_octree){
-      ROS_ERROR("Could not read OcTree in file, currently there are no other types supported in .ot");
-      return false;
-    }
-
-  } else{
-    return false;
-  }
-
-  ROS_INFO("Octomap file %s loaded (%zu nodes).", filename.c_str(),m_octree->size());
-
-  m_treeDepth = m_octree->getTreeDepth();
-  m_maxTreeDepth = m_treeDepth;
-  m_res = m_octree->getResolution();
-  m_gridmap.info.resolution = m_res;
-  double minX, minY, minZ;
-  double maxX, maxY, maxZ;
-  m_octree->getMetricMin(minX, minY, minZ);
-  m_octree->getMetricMax(maxX, maxY, maxZ);
-
-  m_updateBBXMin[0] = m_octree->coordToKey(minX);
-  m_updateBBXMin[1] = m_octree->coordToKey(minY);
-  m_updateBBXMin[2] = m_octree->coordToKey(minZ);
-
-  m_updateBBXMax[0] = m_octree->coordToKey(maxX);
-  m_updateBBXMax[1] = m_octree->coordToKey(maxY);
-  m_updateBBXMax[2] = m_octree->coordToKey(maxZ);
-
-  publishAll();
-
-  return true;
-
-}
-
 // posestamped input callback
 void OctomapServer::insertSubmap3dposeCallback(const geometry_msgs::PoseStamped::ConstPtr& pose){
   ros::WallTime startTime = ros::WallTime::now();
@@ -307,7 +254,15 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
       Trans.block<3,3>(0,0) = nowPose_R;
       Trans.block<3,1>(0,3) = nowPose_v;
       pcl::transformPointCloud(temp, temp, Trans);
+
+      //insert submap to pointcloud map
       *m_global_pc_map += temp;
+      
+      //insert submap to octomap
+      //PCLPointCloud pc_ground;
+      //pc_ground.header = temp.header;
+      //tf::Point sensorOrigin(0,0,0);
+      //insertScan(sensorOrigin, pc_ground, temp);
     }
   }
 
@@ -466,7 +421,9 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 // publish stored poses and optimized local submap
 void OctomapServer::publishSubmap3d(const ros::Time& rostime){
   bool publishSubmap3d = (m_latchedTopics || m_submap3dPub.getNumSubscribers() > 0);
-  
+  //bool publishFullMap = (m_latchedTopics || m_fullMapPub.getNumSubscribers() > 0);
+  //bool publishBinaryMap = (m_latchedTopics || m_binaryMapPub.getNumSubscribers() > 0);
+
   if (publishSubmap3d){
     sensor_msgs::PointCloud2 cloud;
     pcl::toROSMsg (*m_global_pc_map, cloud);
@@ -474,6 +431,15 @@ void OctomapServer::publishSubmap3d(const ros::Time& rostime){
     cloud.header.stamp = rostime;
     m_submap3dPub.publish(cloud);
   }
+
+  //if (publishFullMap){
+  //  publishFullOctoMap(rostime);
+  //}
+
+  //if (publishBinaryMap){
+  //  publishBinaryOctoMap(rostime);
+  //}
+
   ROS_INFO("Published global map");
 }
 

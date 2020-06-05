@@ -109,7 +109,6 @@ public:
   virtual void insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
   virtual void insertSubmap3dposeCallback(const geometry_msgs::PoseStamped::ConstPtr& pose);
   virtual void insertSubmap3dNodeCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
-  virtual bool openFile(const std::string& filename);
 
 protected:
   inline static void updateMinKey(const octomap::OcTreeKey& in, octomap::OcTreeKey& min) {
