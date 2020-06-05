@@ -153,6 +153,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
   m_posePub = m_nh.advertise<geometry_msgs::PoseStamped>("submap3d_pose", 1, m_latchedTopics);
   m_submap3dPub = m_nh.advertise<sensor_msgs::PointCloud2>("submap3d_map", 1, m_latchedTopics);
+  m_posePointCloudPub = m_nh.advertise<octomap_server::PosePointCloud2>("submap3d", 1, m_latchedTopics);
 
   // subscriber
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
@@ -265,6 +266,21 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
     m_SizePoses = pose_array->poses.size();
     last_pose = pose_array->poses[m_SizePoses-1];
 
+    // transfer to the local ref frame
+    Eigen::Quaterniond last_pose_q(last_pose.orientation.w, last_pose.orientation.x, last_pose.orientation.y, last_pose.orientation.z);
+    Eigen::Vector3d last_pose_v(last_pose.position.x, last_pose.position.y, last_pose.position.z);
+    Eigen::Matrix3d last_pose_R = last_pose_q.toRotationMatrix();
+    //Eigen::Matrix4d Trans; 
+    //Trans.setIdentity();
+    //Trans.block<3,3>(0,0) = last_pose_R;
+    //Trans.block<3,1>(0,3) = last_pose_v;
+    Eigen::Matrix4d Trans_inverse; 
+    Trans_inverse.setIdentity();
+    Trans_inverse.block<3,3>(0,0) = last_pose_R.transpose();
+    Trans_inverse.block<3,1>(0,3) = -last_pose_R.transpose()*last_pose_v;
+    pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, Trans_inverse);
+    //pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, Trans);
+
     // voxel filter to submap3d
     pcl::VoxelGrid<PCLPoint> voxel_filter;
     voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
@@ -272,7 +288,7 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
     voxel_filter.setInputCloud((*m_local_pc_map).makeShared());
     voxel_filter.filter(*temp);
     temp->swap(*m_local_pc_map);
-    ROS_INFO("Pointcloud final pub (%zu pts (local_pc_map))", m_local_pc_map->size());
+    ROS_DEBUG("Pointcloud final pub (%zu pts (local_pc_map))", m_local_pc_map->size());
 
     // store pose and submap pair
     m_local_pc_maps.push_back(m_local_pc_map); 
@@ -456,12 +472,12 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 void OctomapServer::publishSubmap3d(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   bool publishSubmap3d = (m_latchedTopics || m_submap3dPub.getNumSubscribers() > 0);
-  bool publishPose = (m_latchedTopics || m_posePub.getNumSubscribers() > 0);
-  bool publishPointCloud = (m_latchedTopics || m_pointCloudPub.getNumSubscribers() > 0);
+  //bool publishPose = (m_latchedTopics || m_posePub.getNumSubscribers() > 0);
+  bool publishPoseSubmap3d = (m_latchedTopics || m_posePointCloudPub.getNumSubscribers() > 0);
 
-  std::stringstream frame_id_now; 
+  //std::stringstream frame_id_now; 
   int index_now = (int)(m_SizePoses); // start from 1 = corresponding len of pose array
-  frame_id_now << "submap3d_" << index_now;
+  //frame_id_now << "submap3d_" << index_now;
   
   if (publishSubmap3d){
     sensor_msgs::PointCloud2 cloud;
@@ -472,6 +488,7 @@ void OctomapServer::publishSubmap3d(const ros::Time& rostime){
     ROS_INFO("Published maps");
   }
 
+  /*
   if (publishPose){
     geometry_msgs::PoseStamped poseS;
     poseS.header.frame_id = frame_id_now.str();//m_worldFrameId;//
@@ -480,7 +497,17 @@ void OctomapServer::publishSubmap3d(const ros::Time& rostime){
     m_posePub.publish(poseS);
     ROS_INFO("Published poses");
   }
+  */
 
+  if (publishPoseSubmap3d){
+    octomap_server::PosePointCloud2 pcloud;
+    pcloud.header.frame_id = m_worldFrameId;//m_worldFrameId;//
+    pcloud.header.stamp = rostime;
+    pcloud.node_id = index_now;
+    pcl::toROSMsg (*m_local_pc_map, pcloud.cloud);
+    m_posePointCloudPub.publish(pcloud);
+    ROS_INFO("Published posePointCloud");
+  }
 }
 
 void OctomapServer::publishAll(const ros::Time& rostime){

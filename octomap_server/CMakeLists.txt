@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
 project(octomap_server)
 
+add_compile_options(-std=c++11)
+
 set(PACKAGE_DEPENDENCIES
   roscpp
   visualization_msgs
@@ -15,6 +17,7 @@ set(PACKAGE_DEPENDENCIES
   octomap_msgs
   dynamic_reconfigure
   nodelet
+  message_generation
 )
 
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})
@@ -30,10 +33,22 @@ include_directories(
 
 generate_dynamic_reconfigure_options(cfg/OctomapServer.cfg)
 
+add_message_files(
+  DIRECTORY msg
+  FILES PosePointCloud2.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  geometry_msgs
+  sensor_msgs
+)
+
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS ${PACKAGE_DEPENDENCIES}
+  CATKIN_DEPENDS ${PACKAGE_DEPENDENCIES} message_runtime message_generation
   DEPENDS OCTOMAP
 )
 
@@ -87,6 +102,7 @@ target_link_libraries(submap3d_server_node Submap3dServer ${LINK_LIBS})
 add_library(Submap3dVisualizer src/Submap3dVisualizer.cpp)
 target_link_libraries(Submap3dVisualizer ${LINK_LIBS})
 add_dependencies(Submap3dVisualizer ${PROJECT_NAME}_gencfg)
+target_compile_definitions(Submap3dVisualizer PUBLIC COLOR_OCTOMAP_SERVER)
 
 # octomap_server_node
 add_executable(submap3d_visualizer_node src/submap3d_visualizer.cpp)
@@ -103,6 +119,7 @@ target_link_libraries(submap3d_visualizer_node Submap3dVisualizer ${LINK_LIBS})
 # octomap_color_server_node
 #add_executable(octomap_color_server_node src/octomap_server_node.cpp)
 #target_link_libraries(octomap_color_server_node ${PROJECT_NAME}_color ${LINK_LIBS})
+
 
 # ===================================================
 # Nodelet

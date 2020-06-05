@@ -291,40 +291,24 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
   //ROS_INFO("Get pose array sized %zu", pose_array->poses.size());
   unsigned node_id_now = pose_array->poses.size();
 
-  //update NodeGraph
+  //update global map, tuning with live pose_array from cartographer
+  delete m_global_pc_map;
+  m_global_pc_map = new PCLPointCloud;
   for (unsigned i=0; i<node_id_now; ++i){
     auto nodeExist = NodeGraph.find(i+1);
     if (nodeExist!=NodeGraph.end()){
-      Pose nodePose = nodeExist->second.first;
-      Eigen::Quaterniond nodePose_q(nodePose.orientation.w, nodePose.orientation.x, nodePose.orientation.y, nodePose.orientation.z);
-      Eigen::Vector3d nodePose_v(nodePose.position.x, nodePose.position.y, nodePose.position.z);
-    	Eigen::Matrix3d nodePose_R = nodePose_q.toRotationMatrix();
-
+      PCLPointCloud temp = nodeExist->second.second;
       Pose nowPose = pose_array->poses[i];
       Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
       Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
-    	Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
-
-      //calculate transformation
-      Eigen::Vector3d delta_v = nowPose_v - nodePose_v;
-      Eigen::Matrix3d delta_R = nowPose_R*nodePose_R.inverse();
-      Eigen::Matrix4d Trans; // Your Transformation Matrix
-      Trans.setIdentity();   // Set to Identity to make bottom row of Matrix 0,0,0,1
-      Trans.block<3,3>(0,0) = delta_R;
-      Trans.block<3,1>(0,3) = delta_v;
-
-      //update value
-      pcl::transformPointCloud(nodeExist->second.second, nodeExist->second.second, Trans);
-      nodeExist->second.first = nowPose;
-
-      //ROS_INFO("update exist nodeid %d", nodeExist->first);
+      Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
+      Eigen::Matrix4d Trans; 
+      Trans.setIdentity();
+      Trans.block<3,3>(0,0) = nowPose_R;
+      Trans.block<3,1>(0,3) = nowPose_v;
+      pcl::transformPointCloud(temp, temp, Trans);
+      *m_global_pc_map += temp;
     }
-  }
-  // ensemble NodeGraph to global map
-  delete m_global_pc_map;
-  m_global_pc_map = new PCLPointCloud;
-  for(auto it = NodeGraph.begin(); it != NodeGraph.end(); it++) {
-      *m_global_pc_map += it->second.second;
   }
 
   //publish globalmap
@@ -334,7 +318,6 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
     publishSubmap3d(pose_array->header.stamp);
     previousTime = ros::WallTime::now();
   }
-
   return;
 }
 

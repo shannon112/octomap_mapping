@@ -34,9 +34,12 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <std_msgs/ColorRGBA.h>
-
+#include <unordered_map>
 // #include <moveit_msgs/CollisionObject.h>
 // #include <moveit_msgs/CollisionMap.h>
+
+// Msg and Srv
+#include <octomap_server/PosePointCloud2.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/Pose.h>
@@ -92,6 +95,8 @@ public:
   typedef octomap_msgs::BoundingBoxQuery BBXSrv;
   typedef geometry_msgs::PoseArray PoseArray;
   typedef geometry_msgs::Pose Pose;
+  typedef std::pair<Pose,PCLPointCloud> PoseCloud;
+  typedef std::pair<int,PoseCloud> Node;
 
   OctomapServer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
   virtual ~OctomapServer();
@@ -103,6 +108,7 @@ public:
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
   virtual void insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
   virtual void insertSubmap3dposeCallback(const geometry_msgs::PoseStamped::ConstPtr& pose);
+  virtual void insertSubmap3dNodeCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
   virtual bool openFile(const std::string& filename);
 
 protected:
@@ -209,12 +215,17 @@ protected:
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
   ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub, m_posePub, m_submap3dPub;
+
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
   message_filters::Subscriber<geometry_msgs::PoseStamped>* m_poseStampedSub;
+  message_filters::Subscriber<octomap_server::PosePointCloud2>* m_posePointCloudSub;
+
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
   tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseArraySub;
   tf::MessageFilter<geometry_msgs::PoseStamped>* m_tfPoseStampedSub;
+  tf::MessageFilter<octomap_server::PosePointCloud2>* m_tfPosePointCloudSub;
+
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;
   boost::recursive_mutex m_config_mutex;
@@ -279,6 +290,7 @@ protected:
   std::vector<PCLPointCloud*> m_local_pc_maps;
   PCLPointCloud* m_global_pc_map;
   ros::WallTime previousTime;
+  std::unordered_map<int, PoseCloud> NodeGraph;
 };
 }
 
