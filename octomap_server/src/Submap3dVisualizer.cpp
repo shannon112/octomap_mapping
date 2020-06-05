@@ -16,9 +16,12 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_nh_private(private_nh_),
   m_pointCloudSub(NULL),
   m_poseArraySub(NULL),
+  m_posePointCloudSub(NULL),
+  m_poseStampedSub(NULL),
   m_tfPointCloudSub(NULL),
   m_tfPoseArraySub(NULL),
   m_tfPoseStampedSub(NULL),
+  m_tfPosePointCloudSub(NULL),
   m_reconfigureServer(m_config_mutex, private_nh_),
 
   m_SizePoses(0),
@@ -160,6 +163,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "submap3d_map", 5);
   m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
   m_poseStampedSub = new message_filters::Subscriber<geometry_msgs::PoseStamped> (m_nh, "submap3d_pose", 5);
+  m_posePointCloudSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "submap3d", 5);
 
   // tf listener
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
@@ -168,6 +172,9 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_tfPoseArraySub->registerCallback(boost::bind(&OctomapServer::insertSubmap3dCallback, this, _1));
   m_tfPoseStampedSub = new tf::MessageFilter<geometry_msgs::PoseStamped> (*m_poseStampedSub, m_tfListener, m_worldFrameId, 5);
   m_tfPoseStampedSub->registerCallback(boost::bind(&OctomapServer::insertSubmap3dposeCallback, this, _1));
+  m_tfPosePointCloudSub = new tf::MessageFilter<octomap_server::PosePointCloud2> (*m_posePointCloudSub, m_tfListener, m_worldFrameId, 5);
+  m_tfPosePointCloudSub->registerCallback(boost::bind(&OctomapServer::insertSubmap3dNodeCallback, this, _1));
+
 
   // service
   m_octomapBinaryService = m_nh.advertiseService("octomap_binary", &OctomapServer::octomapBinarySrv, this);
@@ -204,6 +211,11 @@ OctomapServer::~OctomapServer(){
   if (m_tfPoseStampedSub){
     delete m_tfPoseStampedSub;
     m_tfPoseStampedSub = NULL;
+  }
+
+  if (m_tfPosePointCloudSub){
+    delete m_tfPosePointCloudSub;
+    m_tfPosePointCloudSub = NULL;
   }
 
   if (m_octree){
@@ -269,32 +281,75 @@ bool OctomapServer::openFile(const std::string& filename){
 // posestamped input callback
 void OctomapServer::insertSubmap3dposeCallback(const geometry_msgs::PoseStamped::ConstPtr& pose){
   ros::WallTime startTime = ros::WallTime::now();
-  ROS_INFO("Get pose %s", pose->header.frame_id.c_str());
+  //ROS_INFO("Get pose %s", pose->header.frame_id.c_str());
   return;
 }
 
 // pose_array input callback
 void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
   ros::WallTime startTime = ros::WallTime::now();
-  ROS_INFO("Get pose array sized %zu", pose_array->poses.size());
+  //ROS_INFO("Get pose array sized %zu", pose_array->poses.size());
+  unsigned node_id_now = pose_array->poses.size();
+
+  //update NodeGraph
+  for (unsigned i=0; i<node_id_now; ++i){
+    auto nodeExist = NodeGraph.find(i+1);
+    if (nodeExist!=NodeGraph.end()){
+      Pose nodePose = nodeExist->second.first;
+      Eigen::Quaterniond nodePose_q(nodePose.orientation.w, nodePose.orientation.x, nodePose.orientation.y, nodePose.orientation.z);
+      Eigen::Vector3d nodePose_v(nodePose.position.x, nodePose.position.y, nodePose.position.z);
+    	Eigen::Matrix3d nodePose_R = nodePose_q.toRotationMatrix();
+
+      Pose nowPose = pose_array->poses[i];
+      Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
+      Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
+    	Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
+
+      //calculate transformation
+      Eigen::Vector3d delta_v = nowPose_v - nodePose_v;
+      Eigen::Matrix3d delta_R = nowPose_R*nodePose_R.inverse();
+      Eigen::Matrix4d Trans; // Your Transformation Matrix
+      Trans.setIdentity();   // Set to Identity to make bottom row of Matrix 0,0,0,1
+      Trans.block<3,3>(0,0) = delta_R;
+      Trans.block<3,1>(0,3) = delta_v;
+
+      //update value
+      pcl::transformPointCloud(nodeExist->second.second, nodeExist->second.second, Trans);
+      nodeExist->second.first = nowPose;
+
+      //ROS_INFO("update exist nodeid %d", nodeExist->first);
+    }
+  }
+  // ensemble NodeGraph to global map
+  delete m_global_pc_map;
+  m_global_pc_map = new PCLPointCloud;
+  for(auto it = NodeGraph.begin(); it != NodeGraph.end(); it++) {
+      *m_global_pc_map += it->second.second;
+  }
+
+  //publish globalmap
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+  if ((ros::WallTime::now()-previousTime).toSec() > 2){
+    ROS_INFO("Pointcloud insertion in OctomapServer done (%zu pts (global_pc_map), %f sec)", m_global_pc_map->size(), total_elapsed);
+    publishSubmap3d(pose_array->header.stamp);
+    previousTime = ros::WallTime::now();
+  }
+
   return;
 }
 
 // pointcloud input callback
 void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
   ros::WallTime startTime = ros::WallTime::now();
+}
+
+// posepointcloud input callback,  insert Node to NodeGraph
+void OctomapServer::insertSubmap3dNodeCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud){
+  ros::WallTime startTime = ros::WallTime::now();
   PCLPointCloud pc;
-  pcl::fromROSMsg(*cloud, pc);
-  ROS_INFO("Processing submap3d %s, %zu pts", cloud->header.frame_id.c_str(), pc.size());
-
-  *m_global_pc_map += pc;
-
-  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  if ((ros::WallTime::now()-previousTime).toSec() > 2){
-    ROS_INFO("Pointcloud insertion in OctomapServer done (%zu pts (global_pc_map), %f sec)", m_global_pc_map->size(), total_elapsed);
-    publishSubmap3d(cloud->header.stamp);
-    previousTime = ros::WallTime::now();
-  }
+  pcl::fromROSMsg(pose_pointcloud->cloud, pc);
+  NodeGraph.insert(Node(pose_pointcloud->node_id, PoseCloud(pose_pointcloud->pose, pc)));
+  ROS_INFO("Get node %d, insert to graph size= %d", pose_pointcloud->node_id, NodeGraph.size());
   return;
 }
 
