@@ -1,4 +1,4 @@
-#include <octomap_server/Submap3dServer.h>
+#include <submap3d_server/Submap3dServer.h>
 #include <sstream>
 
 using namespace octomap;
@@ -9,16 +9,15 @@ bool is_equal (double a, double b, double epsilon = 1.0e-7)
     return std::abs(a - b) < epsilon;
 }
 
-namespace octomap_server{
+namespace submap3d_server{
 
-OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeHandle &nh_)
+Submap3dServer::Submap3dServer(const ros::NodeHandle private_nh_, const ros::NodeHandle &nh_)
 : m_nh(nh_),
   m_nh_private(private_nh_),
   m_pointCloudSub(NULL),
   m_poseArraySub(NULL),
   m_tfPointCloudSub(NULL),
   m_tfPoseArraySub(NULL),
-  m_reconfigureServer(m_config_mutex, private_nh_),
 
   m_SizePoses(0),
   m_local_pc_map(new PCLPointCloud),
@@ -161,22 +160,18 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
 
   // tf listener
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
-  m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServer::insertCloudCallback, this, _1));
+  m_tfPointCloudSub->registerCallback(boost::bind(&Submap3dServer::insertCloudCallback, this, _1));
   m_tfPoseArraySub = new tf::MessageFilter<geometry_msgs::PoseArray> (*m_poseArraySub, m_tfListener, m_worldFrameId, 5);
-  m_tfPoseArraySub->registerCallback(boost::bind(&OctomapServer::insertSubmap3dCallback, this, _1));
+  m_tfPoseArraySub->registerCallback(boost::bind(&Submap3dServer::insertSubmap3dCallback, this, _1));
 
   // service
-  m_octomapBinaryService = m_nh.advertiseService("octomap_binary", &OctomapServer::octomapBinarySrv, this);
-  m_octomapFullService = m_nh.advertiseService("octomap_full", &OctomapServer::octomapFullSrv, this);
-  m_clearBBXService = m_nh_private.advertiseService("clear_bbx", &OctomapServer::clearBBXSrv, this);
-  m_resetService = m_nh_private.advertiseService("reset", &OctomapServer::resetSrv, this);
-
-  dynamic_reconfigure::Server<OctomapServerConfig>::CallbackType f;
-  f = boost::bind(&OctomapServer::reconfigureCallback, this, _1, _2);
-  m_reconfigureServer.setCallback(f);
+  m_octomapBinaryService = m_nh.advertiseService("octomap_binary", &Submap3dServer::octomapBinarySrv, this);
+  m_octomapFullService = m_nh.advertiseService("octomap_full", &Submap3dServer::octomapFullSrv, this);
+  m_clearBBXService = m_nh_private.advertiseService("clear_bbx", &Submap3dServer::clearBBXSrv, this);
+  m_resetService = m_nh_private.advertiseService("reset", &Submap3dServer::resetSrv, this);
 }
 
-OctomapServer::~OctomapServer(){
+Submap3dServer::~Submap3dServer(){
   if (m_tfPointCloudSub){
     delete m_tfPointCloudSub;
     m_tfPointCloudSub = NULL;
@@ -204,61 +199,8 @@ OctomapServer::~OctomapServer(){
 
 }
 
-bool OctomapServer::openFile(const std::string& filename){
-  if (filename.length() <= 3)
-    return false;
-
-  std::string suffix = filename.substr(filename.length()-3, 3);
-  if (suffix== ".bt"){
-    if (!m_octree->readBinary(filename)){
-      return false;
-    }
-  } else if (suffix == ".ot"){
-    AbstractOcTree* tree = AbstractOcTree::read(filename);
-    if (!tree){
-      return false;
-    }
-    if (m_octree){
-      delete m_octree;
-      m_octree = NULL;
-    }
-    m_octree = dynamic_cast<OcTreeT*>(tree);
-    if (!m_octree){
-      ROS_ERROR("Could not read OcTree in file, currently there are no other types supported in .ot");
-      return false;
-    }
-
-  } else{
-    return false;
-  }
-
-  ROS_INFO("Octomap file %s loaded (%zu nodes).", filename.c_str(),m_octree->size());
-
-  m_treeDepth = m_octree->getTreeDepth();
-  m_maxTreeDepth = m_treeDepth;
-  m_res = m_octree->getResolution();
-  m_gridmap.info.resolution = m_res;
-  double minX, minY, minZ;
-  double maxX, maxY, maxZ;
-  m_octree->getMetricMin(minX, minY, minZ);
-  m_octree->getMetricMax(maxX, maxY, maxZ);
-
-  m_updateBBXMin[0] = m_octree->coordToKey(minX);
-  m_updateBBXMin[1] = m_octree->coordToKey(minY);
-  m_updateBBXMin[2] = m_octree->coordToKey(minZ);
-
-  m_updateBBXMax[0] = m_octree->coordToKey(maxX);
-  m_updateBBXMax[1] = m_octree->coordToKey(maxY);
-  m_updateBBXMax[2] = m_octree->coordToKey(maxZ);
-
-  publishAll();
-
-  return true;
-
-}
-
 // pose_array input callback
-void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
+void Submap3dServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
   ros::WallTime startTime = ros::WallTime::now();
   ros::Time latest_pa_stamp = pose_array->header.stamp;
 
@@ -306,7 +248,7 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
 }
 
 // pointcloud input callback
-void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
+void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
   ros::WallTime startTime = ros::WallTime::now();
   ros::Time latest_pc_stamp = cloud->header.stamp;
 
@@ -367,7 +309,7 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 }
 
 // processing one pointcloud input
-void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& ground, const PCLPointCloud& nonground){
+void Submap3dServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& ground, const PCLPointCloud& nonground){
   point3d sensorOrigin = pointTfToOctomap(sensorOriginTf);
 
   if (!m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMin)
@@ -494,7 +436,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 }
 
 // publish stored poses and optimized local submap
-void OctomapServer::publishSubmap3d(const ros::Time& rostime){
+void Submap3dServer::publishSubmap3d(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   bool publishSubmap3d = (m_latchedTopics || m_submap3dPub.getNumSubscribers() > 0);
   //bool publishPose = (m_latchedTopics || m_posePub.getNumSubscribers() > 0);
@@ -535,7 +477,7 @@ void OctomapServer::publishSubmap3d(const ros::Time& rostime){
   }
 }
 
-void OctomapServer::publishAll(const ros::Time& rostime){
+void Submap3dServer::publishAll(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   size_t octomapSize = m_octree->size();
   // TODO: estimate num occ. voxels for size of arrays (reserve)
@@ -756,7 +698,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
 }
 
 
-bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
+bool Submap3dServer::octomapBinarySrv(OctomapSrv::Request  &req,
                                     OctomapSrv::Response &res)
 {
   ros::WallTime startTime = ros::WallTime::now();
@@ -771,7 +713,7 @@ bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
   return true;
 }
 
-bool OctomapServer::octomapFullSrv(OctomapSrv::Request  &req,
+bool Submap3dServer::octomapFullSrv(OctomapSrv::Request  &req,
                                     OctomapSrv::Response &res)
 {
   ROS_INFO("Sending full map data on service request");
@@ -785,7 +727,7 @@ bool OctomapServer::octomapFullSrv(OctomapSrv::Request  &req,
   return true;
 }
 
-bool OctomapServer::clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp){
+bool Submap3dServer::clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp){
   point3d min = pointMsgToOctomap(req.min);
   point3d max = pointMsgToOctomap(req.max);
 
@@ -804,7 +746,7 @@ bool OctomapServer::clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp){
   return true;
 }
 
-bool OctomapServer::resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp) {
+bool Submap3dServer::resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp) {
   visualization_msgs::MarkerArray occupiedNodesVis;
   occupiedNodesVis.markers.resize(m_treeDepth +1);
   ros::Time rostime = ros::Time::now();
@@ -850,7 +792,7 @@ bool OctomapServer::resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Res
   return true;
 }
 
-void OctomapServer::publishBinaryOctoMap(const ros::Time& rostime) const{
+void Submap3dServer::publishBinaryOctoMap(const ros::Time& rostime) const{
 
   Octomap map;
   map.header.frame_id = m_worldFrameId;
@@ -862,7 +804,7 @@ void OctomapServer::publishBinaryOctoMap(const ros::Time& rostime) const{
     ROS_ERROR("Error serializing OctoMap");
 }
 
-void OctomapServer::publishFullOctoMap(const ros::Time& rostime) const{
+void Submap3dServer::publishFullOctoMap(const ros::Time& rostime) const{
 
   Octomap map;
   map.header.frame_id = m_worldFrameId;
@@ -876,7 +818,7 @@ void OctomapServer::publishFullOctoMap(const ros::Time& rostime) const{
 }
 
 
-void OctomapServer::filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground, PCLPointCloud& nonground) const{
+void Submap3dServer::filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground, PCLPointCloud& nonground) const{
   ground.header = pc.header;
   nonground.header = pc.header;
 
@@ -985,7 +927,7 @@ void OctomapServer::filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& gr
 
 }
 
-void OctomapServer::handlePreNodeTraversal(const ros::Time& rostime){
+void Submap3dServer::handlePreNodeTraversal(const ros::Time& rostime){
   if (m_publish2DMap){
     // init projected 2D map:
     m_gridmap.header.frame_id = m_worldFrameId;
@@ -1095,41 +1037,41 @@ void OctomapServer::handlePreNodeTraversal(const ros::Time& rostime){
 
 }
 
-void OctomapServer::handlePostNodeTraversal(const ros::Time& rostime){
+void Submap3dServer::handlePostNodeTraversal(const ros::Time& rostime){
 
   if (m_publish2DMap)
     m_mapPub.publish(m_gridmap);
 }
 
-void OctomapServer::handleOccupiedNode(const OcTreeT::iterator& it){
+void Submap3dServer::handleOccupiedNode(const OcTreeT::iterator& it){
 
   if (m_publish2DMap && m_projectCompleteMap){
     update2DMap(it, true);
   }
 }
 
-void OctomapServer::handleFreeNode(const OcTreeT::iterator& it){
+void Submap3dServer::handleFreeNode(const OcTreeT::iterator& it){
 
   if (m_publish2DMap && m_projectCompleteMap){
     update2DMap(it, false);
   }
 }
 
-void OctomapServer::handleOccupiedNodeInBBX(const OcTreeT::iterator& it){
+void Submap3dServer::handleOccupiedNodeInBBX(const OcTreeT::iterator& it){
 
   if (m_publish2DMap && !m_projectCompleteMap){
     update2DMap(it, true);
   }
 }
 
-void OctomapServer::handleFreeNodeInBBX(const OcTreeT::iterator& it){
+void Submap3dServer::handleFreeNodeInBBX(const OcTreeT::iterator& it){
 
   if (m_publish2DMap && !m_projectCompleteMap){
     update2DMap(it, false);
   }
 }
 
-void OctomapServer::update2DMap(const OcTreeT::iterator& it, bool occupied){
+void Submap3dServer::update2DMap(const OcTreeT::iterator& it, bool occupied){
 
   // update 2D map (occupied always overrides):
 
@@ -1162,7 +1104,7 @@ void OctomapServer::update2DMap(const OcTreeT::iterator& it, bool occupied){
 
 
 
-bool OctomapServer::isSpeckleNode(const OcTreeKey&nKey) const {
+bool Submap3dServer::isSpeckleNode(const OcTreeKey&nKey) const {
   OcTreeKey key;
   bool neighborFound = false;
   for (key[2] = nKey[2] - 1; !neighborFound && key[2] <= nKey[2] + 1; ++key[2]){
@@ -1182,65 +1124,7 @@ bool OctomapServer::isSpeckleNode(const OcTreeKey&nKey) const {
   return neighborFound;
 }
 
-void OctomapServer::reconfigureCallback(octomap_server::OctomapServerConfig& config, uint32_t level){
-  if (m_maxTreeDepth != unsigned(config.max_depth))
-    m_maxTreeDepth = unsigned(config.max_depth);
-  else{
-    m_pointcloudMinZ            = config.pointcloud_min_z;
-    m_pointcloudMaxZ            = config.pointcloud_max_z;
-    m_occupancyMinZ             = config.occupancy_min_z;
-    m_occupancyMaxZ             = config.occupancy_max_z;
-    m_filterSpeckles            = config.filter_speckles;
-    m_filterGroundPlane         = config.filter_ground;
-    m_compressMap               = config.compress_map;
-    m_incrementalUpdate         = config.incremental_2D_projection;
-
-    // Parameters with a namespace require an special treatment at the beginning, as dynamic reconfigure
-    // will overwrite them because the server is not able to match parameters' names.
-    if (m_initConfig){
-		// If parameters do not have the default value, dynamic reconfigure server should be updated.
-		if(!is_equal(m_groundFilterDistance, 0.04))
-          config.ground_filter_distance = m_groundFilterDistance;
-		if(!is_equal(m_groundFilterAngle, 0.15))
-          config.ground_filter_angle = m_groundFilterAngle;
-	    if(!is_equal( m_groundFilterPlaneDistance, 0.07))
-          config.ground_filter_plane_distance = m_groundFilterPlaneDistance;
-        if(!is_equal(m_maxRange, -1.0))
-          config.sensor_model_max_range = m_maxRange;
-        if(!is_equal(m_octree->getProbHit(), 0.7))
-          config.sensor_model_hit = m_octree->getProbHit();
-	    if(!is_equal(m_octree->getProbMiss(), 0.4))
-          config.sensor_model_miss = m_octree->getProbMiss();
-		if(!is_equal(m_octree->getClampingThresMin(), 0.12))
-          config.sensor_model_min = m_octree->getClampingThresMin();
-		if(!is_equal(m_octree->getClampingThresMax(), 0.97))
-          config.sensor_model_max = m_octree->getClampingThresMax();
-        m_initConfig = false;
-
-	    boost::recursive_mutex::scoped_lock reconf_lock(m_config_mutex);
-        m_reconfigureServer.updateConfig(config);
-    }
-    else{
-	  m_groundFilterDistance      = config.ground_filter_distance;
-      m_groundFilterAngle         = config.ground_filter_angle;
-      m_groundFilterPlaneDistance = config.ground_filter_plane_distance;
-      m_maxRange                  = config.sensor_model_max_range;
-      m_octree->setClampingThresMin(config.sensor_model_min);
-      m_octree->setClampingThresMax(config.sensor_model_max);
-
-     // Checking values that might create unexpected behaviors.
-      if (is_equal(config.sensor_model_hit, 1.0))
-		config.sensor_model_hit -= 1.0e-6;
-      m_octree->setProbHit(config.sensor_model_hit);
-	  if (is_equal(config.sensor_model_miss, 0.0))
-		config.sensor_model_miss += 1.0e-6;
-      m_octree->setProbMiss(config.sensor_model_miss);
-	}
-  }
-  publishAll();
-}
-
-void OctomapServer::adjustMapData(nav_msgs::OccupancyGrid& map, const nav_msgs::MapMetaData& oldMapInfo) const{
+void Submap3dServer::adjustMapData(nav_msgs::OccupancyGrid& map, const nav_msgs::MapMetaData& oldMapInfo) const{
   if (map.info.resolution != oldMapInfo.resolution){
     ROS_ERROR("Resolution of map changed, cannot be adjusted");
     return;
@@ -1281,7 +1165,7 @@ void OctomapServer::adjustMapData(nav_msgs::OccupancyGrid& map, const nav_msgs::
 }
 
 
-std_msgs::ColorRGBA OctomapServer::heightMapColor(double h) {
+std_msgs::ColorRGBA Submap3dServer::heightMapColor(double h) {
 
   std_msgs::ColorRGBA color;
   color.a = 1.0;

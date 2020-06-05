@@ -46,9 +46,6 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <std_srvs/Empty.h>
 
-#include <dynamic_reconfigure/server.h>
-#include <octomap_server/OctomapServerConfig.h>
-
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
 #include <pcl_ros/transforms.h>
@@ -81,8 +78,8 @@
 #include <octomap/ColorOcTree.h>
 #endif
 
-namespace octomap_server {
-class OctomapServer {
+namespace submap3d_server {
+class Submap3dServer {
 
 public:
 #ifdef COLOR_OCTOMAP_SERVER
@@ -99,8 +96,8 @@ public:
   typedef geometry_msgs::PoseArray PoseArray;
   typedef geometry_msgs::Pose Pose;
 
-  OctomapServer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
-  virtual ~OctomapServer();
+  Submap3dServer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
+  virtual ~Submap3dServer();
   virtual bool octomapBinarySrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
   virtual bool octomapFullSrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
   bool clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp);
@@ -108,7 +105,6 @@ public:
 
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
   virtual void insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
-  virtual bool openFile(const std::string& filename);
 
 protected:
   inline static void updateMinKey(const octomap::OcTreeKey& in, octomap::OcTreeKey& min) {
@@ -132,7 +128,6 @@ protected:
             && key[1] <= m_updateBBXMax[1]);
   }
 
-  void reconfigureCallback(octomap_server::OctomapServerConfig& config, uint32_t level);
   void publishBinaryOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   virtual void publishAll(const ros::Time& rostime = ros::Time::now());
@@ -221,7 +216,6 @@ protected:
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;
   boost::recursive_mutex m_config_mutex;
-  dynamic_reconfigure::Server<OctomapServerConfig> m_reconfigureServer;
 
   OcTreeT* m_octree;
   octomap::KeyRay m_keyRay;  // temp storage for ray casting
