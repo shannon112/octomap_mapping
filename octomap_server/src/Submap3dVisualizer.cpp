@@ -239,12 +239,12 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
   unsigned node_id_now = pose_array->poses.size();
 
   //update global map, tuning with live pose_array from cartographer
-  delete m_global_pc_map;
-  m_global_pc_map = new PCLPointCloud;
+  PCLPointCloud::Ptr blank_map (new PCLPointCloud);
+  blank_map->swap(*m_global_pc_map);
   for (unsigned i=0; i<node_id_now; ++i){
     auto nodeExist = NodeGraph.find(i+1);
     if (nodeExist!=NodeGraph.end()){
-      PCLPointCloud temp = nodeExist->second.second;
+      PCLPointCloud temp = *(nodeExist->second.second);
       Pose nowPose = pose_array->poses[i];
       Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
       Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
@@ -284,8 +284,8 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 // posepointcloud input callback,  insert Node to NodeGraph
 void OctomapServer::insertSubmap3dNodeCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud){
   ros::WallTime startTime = ros::WallTime::now();
-  PCLPointCloud pc;
-  pcl::fromROSMsg(pose_pointcloud->cloud, pc);
+  PCLPointCloud::Ptr pc (new PCLPointCloud);
+  pcl::fromROSMsg(pose_pointcloud->cloud, *pc);
   NodeGraph.insert(Node(pose_pointcloud->node_id, PoseCloud(pose_pointcloud->pose, pc)));
   ROS_INFO("Get node %d, insert to graph size= %d", pose_pointcloud->node_id, NodeGraph.size());
   return;

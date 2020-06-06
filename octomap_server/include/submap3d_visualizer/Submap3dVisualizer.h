@@ -95,7 +95,7 @@ public:
   typedef octomap_msgs::BoundingBoxQuery BBXSrv;
   typedef geometry_msgs::PoseArray PoseArray;
   typedef geometry_msgs::Pose Pose;
-  typedef std::pair<Pose,PCLPointCloud> PoseCloud;
+  typedef std::pair<Pose,PCLPointCloud::Ptr> PoseCloud;
   typedef std::pair<int,PoseCloud> Node;
 
   OctomapServer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
@@ -285,9 +285,9 @@ protected:
   unsigned m_SizePoses;
   Pose last_pose;
   std::vector<Pose> m_Poses;
-  PCLPointCloud* m_local_pc_map;
-  std::vector<PCLPointCloud*> m_local_pc_maps;
-  PCLPointCloud* m_global_pc_map;
+  PCLPointCloud::Ptr m_local_pc_map;
+  std::vector<PCLPointCloud::Ptr> m_local_pc_maps;
+  PCLPointCloud::Ptr m_global_pc_map;
   ros::WallTime previousTime;
   std::unordered_map<int, PoseCloud> NodeGraph;
 };
