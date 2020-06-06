@@ -58,7 +58,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/statistical_outlier_removal.h>
-
+#include <pcl/registration/icp.h>
 
 #include <tf/transform_listener.h>
 #include <tf/message_filter.h>
@@ -103,6 +103,7 @@ public:
 
 protected:
   virtual void publishSubmap3d(const ros::Time& rostime = ros::Time::now());
+  virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
 
   /**
    * Adjust data of map due to a change in its info properties (origin or size,
@@ -171,9 +172,11 @@ protected:
   // pose array
   unsigned m_SizePoses;
   Pose last_pose;
-  std::vector<Pose> m_Poses;
-  PCLPointCloud* m_local_pc_map;
-  std::vector<PCLPointCloud*> m_local_pc_maps;
+  //std::vector<Pose> m_Poses;
+  PCLPointCloud::Ptr m_local_pc_map;
+  //std::vector<PCLPointCloud*> m_local_pc_maps;
+
+  bool m_icp;
 };
 }
 
