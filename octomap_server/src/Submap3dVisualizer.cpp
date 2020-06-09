@@ -239,8 +239,10 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
   unsigned node_id_now = pose_array->poses.size();
 
   //update global map, tuning with live pose_array from cartographer
-  PCLPointCloud::Ptr blank_map (new PCLPointCloud);
-  blank_map->swap(*m_global_pc_map);
+  //PCLPointCloud::Ptr blank_map (new PCLPointCloud);
+  //blank_map->swap(*m_global_pc_map);
+
+  m_global_pc_map->clear();
   for (unsigned i=0; i<node_id_now; ++i){
     auto nodeExist = NodeGraph.find(i+1);
     if (nodeExist!=NodeGraph.end()){
@@ -256,8 +258,15 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
       pcl::transformPointCloud(temp, temp, Trans);
 
       //insert submap to pointcloud map
+      //PCLPointCloud::Ptr icp_pc(new PCLPointCloud);
+      //if(m_global_pc_map->size()==0) {
+      //  *m_global_pc_map += temp;
+      //}else {
+      //  PairwiseICP(temp.makeShared(), m_global_pc_map, icp_pc);
+      //  m_global_pc_map = icp_pc;
+      //}
       *m_global_pc_map += temp;
-      
+
       //insert submap to octomap
       //PCLPointCloud pc_ground;
       //pc_ground.header = temp.header;
@@ -274,6 +283,37 @@ void OctomapServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Const
     previousTime = ros::WallTime::now();
   }
   return;
+}
+
+void OctomapServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
+{
+  ros::WallTime startTime = ros::WallTime::now();
+	PCLPointCloud::Ptr src(new PCLPointCloud);
+	PCLPointCloud::Ptr tgt(new PCLPointCloud);
+ 
+	tgt = cloud_target;
+	src = cloud_source;
+ 
+	pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
+	icp.setMaxCorrespondenceDistance(0.3); //ignore the point out of distance(m)
+	icp.setTransformationEpsilon(1e-6); //converge criterion
+	icp.setEuclideanFitnessEpsilon(1); //diverge threshold
+	icp.setMaximumIterations (5);
+	icp.setInputSource (src);
+	icp.setInputTarget (tgt);
+	icp.align (*output);
+	
+  if (icp.hasConverged()){
+    output->resize(tgt->size()+output->size());
+    for (int i=0;i<tgt->size();i++)
+    {
+      output->push_back(tgt->points[i]);
+    }
+  }else{
+    *output += *tgt;
+  }
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+  ROS_INFO("After registration using ICP pointcloud size: %d, time cost: %f(s), converged: %d", output->size(), total_elapsed, icp.hasConverged());
 }
 
 // pointcloud input callback

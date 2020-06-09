@@ -178,7 +178,6 @@ Submap3dServer::~Submap3dServer(){
 
 // pose_array input callback
 void Submap3dServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
-  ros::WallTime startTime = ros::WallTime::now();
   ros::Time latest_pa_stamp = pose_array->header.stamp;
 
   if (pose_array->poses.size() > m_SizePoses){    
@@ -201,13 +200,13 @@ void Submap3dServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Cons
     //pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, Trans);
 
     // voxel filter to submap3d
-    pcl::VoxelGrid<PCLPoint> voxel_filter;
-    voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
-    PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
-    voxel_filter.setInputCloud(m_local_pc_map);
-    voxel_filter.filter(*vx_pc);
-    vx_pc->swap(*m_local_pc_map);
-    ROS_DEBUG("Pointcloud final pub (%zu pts (local_pc_map))", m_local_pc_map->size());
+    //pcl::VoxelGrid<PCLPoint> voxel_filter;
+    //voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
+    //PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
+    //voxel_filter.setInputCloud(m_local_pc_map);
+    //voxel_filter.filter(*vx_pc);
+    //vx_pc->swap(*m_local_pc_map);
+    //ROS_DEBUG("Pointcloud final pub (%zu pts (local_pc_map))", m_local_pc_map->size());
 
     // store pose and submap pair
     //m_local_pc_maps.push_back(m_local_pc_map); 
@@ -217,9 +216,9 @@ void Submap3dServer::insertSubmap3dCallback(const geometry_msgs::PoseArray::Cons
     publishSubmap3d(latest_pa_stamp);
 
     // update to new cycle
-    PCLPointCloud::Ptr blank_map (new PCLPointCloud);
-    blank_map->swap(*m_local_pc_map);
-    m_icp = false;
+    //PCLPointCloud::Ptr blank_map (new PCLPointCloud);
+    //blank_map->swap(*m_local_pc_map);
+    m_local_pc_map->clear();
     //ROS_INFO("Receive new pose!! PoseArray len = %d, m_local_pc_map len = %d, m_Poses len = %d", (int)m_SizePoses, (int)m_local_pc_maps->size(), (int)m_Poses.size());
   }
 
@@ -278,22 +277,24 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   statistical_filter.setInputCloud(pc);
   statistical_filter.filter(*st_pc);
 
+  // voxel filter to submap3d
+  pcl::VoxelGrid<PCLPoint> voxel_filter;
+  voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
+  PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
+  voxel_filter.setInputCloud(st_pc);
+  voxel_filter.filter(*vx_pc);
+
   //accumulate pc to build a local pc map  ref to global frame
   PCLPointCloud::Ptr icp_pc(new PCLPointCloud);
-  /*
   if(m_local_pc_map->size()==0) {
-    *m_local_pc_map += *st_pc;
-  }else if (m_icp) {
-    ROS_INFO("Pass");
+    *m_local_pc_map += *vx_pc;
   }else {
-    PairwiseICP(st_pc, m_local_pc_map, icp_pc);
+    PairwiseICP(vx_pc, m_local_pc_map, icp_pc);
     m_local_pc_map = icp_pc;
-    m_icp = true;
-  }*/
-  *m_local_pc_map += *st_pc;
+  }
   
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  ROS_INFO("Pointcloud insertion in OctomapServer done (%zu/%zu pts (pc/local_pc_map), %f sec)", pc->size(), m_local_pc_map->size(), total_elapsed);
+  ROS_INFO("Pointcloud insertion in OctomapServer done (%zu/%zu pts (pc/local_pc_map), time cost: %f sec)", pc->size(), m_local_pc_map->size(), total_elapsed);
 
   return;
 }
@@ -301,6 +302,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
 // SVD based ICP to align each scan make a submap
 void Submap3dServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
 {
+  ros::WallTime startTime = ros::WallTime::now();
 	PCLPointCloud::Ptr src(new PCLPointCloud);
 	PCLPointCloud::Ptr tgt(new PCLPointCloud);
  
@@ -308,22 +310,21 @@ void Submap3dServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const P
 	src = cloud_source;
  
 	pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
-	icp.setMaxCorrespondenceDistance(0.1);
-	icp.setTransformationEpsilon(1e-10);
-	icp.setEuclideanFitnessEpsilon(0.01);
-	icp.setMaximumIterations (100);
- 
+	icp.setMaxCorrespondenceDistance(0.3); //ignore the point out of distance(m)
+	icp.setTransformationEpsilon(1e-6); //converge criterion
+	icp.setEuclideanFitnessEpsilon(0.1); //diverge threshold
+	icp.setMaximumIterations (10);
 	icp.setInputSource (src);
 	icp.setInputTarget (tgt);
 	icp.align (*output);
-//	std::cout << "has converged:" << icp.hasConverged() << " score: " <<icp.getFitnessScore() << std::endl;
 		
 	output->resize(tgt->size()+output->size());
 	for (int i=0;i<tgt->size();i++)
 	{
 		output->push_back(tgt->points[i]);
 	}
-//ROS_INFO("After registration using ICP: %d", output->size());
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+  ROS_INFO("After registration using ICP pointcloud size: %d, time cost: %f(s), converged: %d", output->size(), total_elapsed, icp.hasConverged());
 }
 
 // publish stored poses and optimized local submap
@@ -366,7 +367,7 @@ void Submap3dServer::publishSubmap3d(const ros::Time& rostime){
     pcloud.node_id = index_now;
     pcl::toROSMsg (*m_local_pc_map, pcloud.cloud);
     m_posePointCloudPub.publish(pcloud);
-    ROS_INFO("Published posePointCloud");
+    ROS_INFO("Published posePointCloud %d", index_now);
   }
 }
 

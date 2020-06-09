@@ -21,7 +21,9 @@ int main(int argc, char** argv){
   ros::spinOnce();
 
   try{
-    ros::spin();
+    ros::MultiThreadedSpinner spinner(4);
+    spinner.spin();
+    //ros::spin();
   }catch(std::runtime_error& e){
     ROS_ERROR("octomap_server exception: %s", e.what());
     return -1;

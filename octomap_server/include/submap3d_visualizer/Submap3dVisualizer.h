@@ -58,7 +58,7 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl_conversions/pcl_conversions.h>
-
+#include <pcl/registration/icp.h>
 
 #include <tf/transform_listener.h>
 #include <tf/message_filter.h>
@@ -137,6 +137,7 @@ protected:
   void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   virtual void publishAll(const ros::Time& rostime = ros::Time::now());
   virtual void publishSubmap3d(const ros::Time& rostime = ros::Time::now());
+  virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
 
   /**
   * @brief update occupancy map with a scan labeled as ground and nonground.
