@@ -281,7 +281,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   pcl::VoxelGrid<PCLPoint> voxel_filter;
   voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
   PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
-  voxel_filter.setInputCloud(pc);//(st_pc);
+  voxel_filter.setInputCloud(st_pc);
   voxel_filter.filter(*vx_pc);
 
   //accumulate pc to build a local pc map  ref to global frame
