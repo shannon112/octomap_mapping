@@ -255,7 +255,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   pass_z_p.setInputCloud(pc);
   pass_z_p.filter(*pc);
   pass_z_n.setInputCloud(pc);
-  pass_z_n.filter(*pc);
+  pass_z_n.filter(*pc); 
 
   // transform pc from cloud frame to global frame
   tf::StampedTransform sensorToWorldTf;
@@ -281,7 +281,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   pcl::VoxelGrid<PCLPoint> voxel_filter;
   voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
   PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
-  voxel_filter.setInputCloud(st_pc);
+  voxel_filter.setInputCloud(pc);//(st_pc);
   voxel_filter.filter(*vx_pc);
 
   //accumulate pc to build a local pc map  ref to global frame
@@ -291,8 +291,9 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   }else {
     PairwiseICP(vx_pc, m_local_pc_map, icp_pc);
     m_local_pc_map = icp_pc;
-  }
-  
+  }  
+  //*m_local_pc_map += *vx_pc;
+
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("Pointcloud insertion in OctomapServer done (%zu/%zu pts (pc/local_pc_map), time cost: %f sec)", pc->size(), m_local_pc_map->size(), total_elapsed);
 

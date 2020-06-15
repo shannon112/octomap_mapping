@@ -111,14 +111,14 @@ target_link_libraries(submap3d_visualizer_node Submap3dVisualizer ${LINK_LIBS})
 # ===================================================
 # Octomap color server
 # ===================================================
-#add_library(${PROJECT_NAME}_color src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
-#target_link_libraries(${PROJECT_NAME}_color ${LINK_LIBS})
-#add_dependencies(${PROJECT_NAME}_color ${PROJECT_NAME}_gencfg)
-#target_compile_definitions(${PROJECT_NAME}_color PUBLIC COLOR_OCTOMAP_SERVER)
+add_library(${PROJECT_NAME}_color src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
+target_link_libraries(${PROJECT_NAME}_color ${LINK_LIBS})
+add_dependencies(${PROJECT_NAME}_color ${PROJECT_NAME}_gencfg)
+target_compile_definitions(${PROJECT_NAME}_color PUBLIC COLOR_OCTOMAP_SERVER)
 
 # octomap_color_server_node
-#add_executable(octomap_color_server_node src/octomap_server_node.cpp)
-#target_link_libraries(octomap_color_server_node ${PROJECT_NAME}_color ${LINK_LIBS})
+add_executable(octomap_color_server_node src/octomap_server_node.cpp)
+target_link_libraries(octomap_color_server_node ${PROJECT_NAME}_color ${LINK_LIBS})
 
 
 # ===================================================
