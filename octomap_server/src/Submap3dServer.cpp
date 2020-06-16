@@ -309,15 +309,17 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   pcl::transformPointCloud(pc, pc, sensorToWorld);
 
   //statistical filter, filtering outlier
+  /*
   PCLPointCloud::Ptr temp (new PCLPointCloud);
   pcl::StatisticalOutlierRemoval<PCLPoint> statistical_filter;
   statistical_filter.setMeanK(50);
   statistical_filter.setStddevMulThresh(1.0);
   statistical_filter.setInputCloud(pc.makeShared());
   statistical_filter.filter(*temp);
+  */
 
   //accumulate pc to build a local pc map  ref to global frame
-  *m_local_pc_map += *temp;
+  *m_local_pc_map += pc;
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("Pointcloud insertion in OctomapServer done (%zu/%zu pts (pc/local_pc_map), %f sec)", pc.size(), m_local_pc_map->size(), total_elapsed);

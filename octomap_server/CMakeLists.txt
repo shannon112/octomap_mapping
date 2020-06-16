@@ -87,6 +87,7 @@ target_link_libraries(submap3d_server_node Submap3dServer ${LINK_LIBS})
 add_library(Submap3dVisualizer src/Submap3dVisualizer.cpp)
 target_link_libraries(Submap3dVisualizer ${LINK_LIBS})
 add_dependencies(Submap3dVisualizer ${PROJECT_NAME}_gencfg)
+target_compile_definitions(Submap3dVisualizer PUBLIC COLOR_OCTOMAP_SERVER)
 
 # octomap_server_node
 add_executable(submap3d_visualizer_node src/submap3d_visualizer.cpp)
