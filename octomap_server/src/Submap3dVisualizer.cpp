@@ -163,7 +163,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "submap3d_map", 5);
   m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
   m_poseStampedSub = new message_filters::Subscriber<geometry_msgs::PoseStamped> (m_nh, "submap3d_pose", 5);
-  m_posePointCloudSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "submap3d", 5);
+  m_posePointCloudSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "node3d", 5);
 
   // tf listener
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);

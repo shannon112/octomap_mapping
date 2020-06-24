@@ -18,6 +18,7 @@ set(PACKAGE_DEPENDENCIES
   dynamic_reconfigure
   nodelet
   message_generation
+  cartographer_ros_msgs
 )
 
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})

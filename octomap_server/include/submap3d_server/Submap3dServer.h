@@ -45,6 +45,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_srvs/Empty.h>
+#include <cartographer_ros_msgs/SubmapList.h>
 
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
@@ -99,10 +100,12 @@ public:
   Submap3dServer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
   virtual ~Submap3dServer();
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
-  virtual void insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
+  virtual void insertPoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
+  virtual void insertSubmapCallback(const cartographer_ros_msgs::SubmapList::ConstPtr& submap_list);
 
 protected:
-  virtual void publishSubmap3d(const ros::Time& rostime = ros::Time::now());
+  virtual void publishSubmap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap);
+  virtual void publishNode3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap);
   virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
 
   /**
@@ -112,13 +115,15 @@ protected:
    */
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
-  ros::Publisher  m_posePub, m_submap3dPub, m_posePointCloudPub;
+  ros::Publisher  m_submap3dPub, m_node3dPub, m_submap3dTestPub;
 
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
+  message_filters::Subscriber<cartographer_ros_msgs::SubmapList>* m_submapListSub;
 
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
   tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseArraySub;
+  tf::MessageFilter<cartographer_ros_msgs::SubmapList>* m_tfSubmapListSub;
 
   tf::TransformListener m_tfListener;
   boost::recursive_mutex m_config_mutex;
@@ -171,12 +176,19 @@ protected:
 
   // pose array
   unsigned m_SizePoses;
+  unsigned m_SizeSubmaps;
+  unsigned m_CompleteSubmaps;
+
   Pose last_pose;
   //std::vector<Pose> m_Poses;
   PCLPointCloud::Ptr m_local_pc_map;
-  //std::vector<PCLPointCloud*> m_local_pc_maps;
+  PCLPointCloud::Ptr submap3d_old;
+  PCLPointCloud::Ptr submap3d_new;
 
-  bool m_icp;
+  std::queue<PCLPointCloud::Ptr> pc_queue;
+  std::queue<PCLPointCloud::Ptr> nodemap_queue;
+  //std::vector< std::queue<PCLPointCloud::Ptr>* > nodemap_queues;
+  //std::vector<PCLPointCloud*> m_local_pc_maps;
 };
 }
 
