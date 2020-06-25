@@ -105,10 +105,10 @@ public:
   bool clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp);
   bool resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
-  virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
-  virtual void insertSubmap3dCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
-  virtual void insertSubmap3dposeCallback(const geometry_msgs::PoseStamped::ConstPtr& pose);
-  virtual void insertSubmap3dNodeCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
+  virtual void insertCloudCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
+  virtual void insertSubmap3dposeCallback(const geometry_msgs::PoseArray::ConstPtr& pose);
+  virtual void subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
+  virtual void subNodeMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
 
 protected:
   inline static void updateMinKey(const octomap::OcTreeKey& in, octomap::OcTreeKey& min) {
@@ -135,8 +135,8 @@ protected:
   void reconfigureCallback(octomap_server::OctomapServerConfig& config, uint32_t level);
   void publishBinaryOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
-  virtual void publishAll(const ros::Time& rostime = ros::Time::now());
-  virtual void publishSubmap3d(const ros::Time& rostime = ros::Time::now());
+  virtual void publishOCTmap3d(const ros::Time& rostime = ros::Time::now());
+  virtual void publishPCmap3d(const ros::Time& rostime = ros::Time::now());
   virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
 
   /**
@@ -147,7 +147,8 @@ protected:
   * @param ground scan endpoints on the ground plane (only clear space)
   * @param nonground all other endpoints (clear up to occupied endpoint)
   */
-  virtual void insertScan(const tf::Point& sensorOrigin, const PCLPointCloud& ground, const PCLPointCloud& nonground);
+  virtual void insertScan(const tf::Point& sensorOrigin, const PCLPointCloud& nonground);
+  virtual void insertPC(const Pose& sensorOrigin, const PCLPointCloud& nonground);
 
   /// label the input cloud "pc" into ground and nonground. Should be in the robot's fixed frame (not world!)
   void filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground, PCLPointCloud& nonground) const;
@@ -214,16 +215,16 @@ protected:
   static std_msgs::ColorRGBA heightMapColor(double h);
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
-  ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub, m_posePub, m_submap3dPub;
+  ros::Publisher  m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_projectedMapPub, m_map3dPub;
 
-  message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
+  message_filters::Subscriber<geometry_msgs::PoseArray>* m_pointCloudSub;
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
-  message_filters::Subscriber<geometry_msgs::PoseStamped>* m_poseStampedSub;
+  message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseStampedSub;
   message_filters::Subscriber<octomap_server::PosePointCloud2>* m_posePointCloudSub;
 
-  tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
+  tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPointCloudSub;
   tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseArraySub;
-  tf::MessageFilter<geometry_msgs::PoseStamped>* m_tfPoseStampedSub;
+  tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseStampedSub;
   tf::MessageFilter<octomap_server::PosePointCloud2>* m_tfPosePointCloudSub;
 
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
@@ -286,11 +287,14 @@ protected:
   unsigned m_SizePoses;
   Pose last_pose;
   std::vector<Pose> m_Poses;
-  PCLPointCloud::Ptr m_local_pc_map;
   std::vector<PCLPointCloud::Ptr> m_local_pc_maps;
+
   PCLPointCloud::Ptr m_global_pc_map;
-  ros::WallTime previousTime;
+  PCLPointCloud::Ptr m_global_pc_map_temp;
+
   std::unordered_map<int, PoseCloud> NodeGraph;
+
+  ros::WallTime previousTime;
 };
 }
 
