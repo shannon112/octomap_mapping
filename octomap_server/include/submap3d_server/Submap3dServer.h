@@ -105,7 +105,7 @@ public:
 
 protected:
   virtual void publishSubmap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap);
-  virtual void publishNode3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap);
+  virtual void publishNodemap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap);
   virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
 
   /**
@@ -115,7 +115,7 @@ protected:
    */
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
-  ros::Publisher  m_submap3dPub, m_node3dPub, m_submap3dTestPub;
+  ros::Publisher  m_submap3dPub, m_nodemap3dPub, m_submap3dTestPub;
 
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;

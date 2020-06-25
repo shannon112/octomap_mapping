@@ -144,7 +144,7 @@ Submap3dServer::Submap3dServer(const ros::NodeHandle private_nh_, const ros::Nod
 
   // publisher
   m_submap3dPub = m_nh.advertise<octomap_server::PosePointCloud2>("submap3d", 1, m_latchedTopics);
-  m_node3dPub = m_nh.advertise<octomap_server::PosePointCloud2>("node3d", 1, m_latchedTopics);
+  m_nodemap3dPub = m_nh.advertise<octomap_server::PosePointCloud2>("nodemap3d", 1, m_latchedTopics);
   m_submap3dTestPub = m_nh.advertise<sensor_msgs::PointCloud2>("submap3d_test", 1, m_latchedTopics);
 
   // subscriber
@@ -248,7 +248,7 @@ void Submap3dServer::insertPoseCallback(const geometry_msgs::PoseArray::ConstPtr
       }
     }
     double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-    //ROS_INFO("ICP registeration is done %zu pts local_pc_map, time cost: %f sec)", m_local_pc_map->size(), total_elapsed);
+    ROS_INFO("ICP registeration is done %zu pts local_pc_map, time cost: %f sec)", m_local_pc_map->size(), total_elapsed);
 
     // voxel filter
     pcl::VoxelGrid<PCLPoint> voxel_filter;
@@ -257,7 +257,7 @@ void Submap3dServer::insertPoseCallback(const geometry_msgs::PoseArray::ConstPtr
     voxel_filter.setInputCloud(m_local_pc_map);
     voxel_filter.filter(*vx_pc);
     total_elapsed = (ros::WallTime::now() - startTime).toSec();
-    //ROS_INFO("node map voxel filter, time cost: %f sec)", total_elapsed);
+    ROS_INFO("node map voxel filter, time cost: %f sec)", total_elapsed);
 
     // enqueue prepare for 3dsubmap_list
     /*
@@ -294,7 +294,7 @@ void Submap3dServer::insertPoseCallback(const geometry_msgs::PoseArray::ConstPtr
     //pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, Trans);
 
     // publish 3dnode_list (submap pair with pose)
-    publishNode3d(latest_pa_stamp, transformed_pc);
+    publishNodemap3d(latest_pa_stamp, transformed_pc);
 
     // update to new cycle
     m_local_pc_map->clear();
@@ -334,7 +334,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   pass_z_n.setInputCloud(pc);
   pass_z_n.filter(*pc); 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  //ROS_INFO("Depth filter, time cost: %f sec)", total_elapsed);
+  ROS_INFO("Depth filter, time cost: %f sec)", total_elapsed);
 
   // voxel filter
   pcl::VoxelGrid<PCLPoint> voxel_filter;
@@ -343,7 +343,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   voxel_filter.setInputCloud(pc);
   voxel_filter.filter(*vx_pc);
   total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  //ROS_INFO("voxel filter, time cost: %f sec)", total_elapsed);
+  ROS_INFO("voxel filter, time cost: %f sec)", total_elapsed);
 
   // transform pc from cloud frame to global frame
   tf::StampedTransform sensorToWorldTf;
@@ -357,7 +357,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
   pcl::transformPointCloud(*vx_pc, *vx_pc, sensorToWorld);
   total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  //ROS_INFO("transformation, time cost: %f sec)", total_elapsed);
+  ROS_INFO("transformation, time cost: %f sec)", total_elapsed);
 
   //statistical filter, filtering outlier
   PCLPointCloud::Ptr st_pc(new PCLPointCloud);
@@ -367,7 +367,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
   statistical_filter.setInputCloud(vx_pc);
   statistical_filter.filter(*st_pc);
   total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  //ROS_INFO("statistical filter, time cost: %f sec)", total_elapsed);
+  ROS_INFO("statistical filter, time cost: %f sec)", total_elapsed);
 
   //push back into queue
   pc_queue.push(st_pc);
@@ -393,29 +393,29 @@ void Submap3dServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const P
 	icp.setInputSource (src);
 	icp.setInputTarget (tgt);
   icp.align (*output); //get aligned_source	
-  //ROS_INFO("ICP pointcloud size src/tgt/output (%zu/%zu/%zu pts)", src->size(), tgt->size(), output->size());
+  ROS_INFO("ICP pointcloud size src/tgt/output (%zu/%zu/%zu pts)", src->size(), tgt->size(), output->size());
   if (icp.hasConverged()){
     *output += *tgt;
   }else{
     output = src;
   }
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  //ROS_INFO("After ICP registration aligned pointcloud size: %d, time cost: %f(s), converged: %d, score: %f", output->size(), total_elapsed, icp.hasConverged(), icp.getFitnessScore());
+  ROS_INFO("After ICP registration aligned pointcloud size: %d, time cost: %f(s), converged: %d, score: %f", output->size(), total_elapsed, icp.hasConverged(), icp.getFitnessScore());
 }
 
 // 3dnode_list pub
-void Submap3dServer::publishNode3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap){
+void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap){
   ros::WallTime startTime = ros::WallTime::now();
-  bool fPublishNode3d = (m_latchedTopics || m_node3dPub.getNumSubscribers() > 0);
+  bool fPublishNodemap3d = (m_latchedTopics || m_nodemap3dPub.getNumSubscribers() > 0);
   int index_now = (int)(m_SizePoses); // start from 1 = corresponding len of pose array
   
-  if (fPublishNode3d){
+  if (fPublishNodemap3d){
     octomap_server::PosePointCloud2 pcloud;
     pcloud.header.frame_id = m_worldFrameId;//m_worldFrameId;//
     pcloud.header.stamp = rostime;
     pcloud.node_id = index_now;
     pcl::toROSMsg (*nodemap, pcloud.cloud);
-    m_node3dPub.publish(pcloud);
+    m_nodemap3dPub.publish(pcloud);
     ROS_INFO("--------Published 3dnode_list %d--------", index_now);
   }
 }
