@@ -110,6 +110,18 @@ add_executable(submap3d_visualizer_node src/submap3d_visualizer.cpp)
 target_link_libraries(submap3d_visualizer_node Submap3dVisualizer ${LINK_LIBS})
 
 # ===================================================
+# Pointcloud  (global map optimizer)
+# ===================================================
+add_library(Submap3dOptimizer src/Submap3dOptimizer.cpp)
+target_link_libraries(Submap3dOptimizer ${LINK_LIBS})
+add_dependencies(Submap3dOptimizer ${PROJECT_NAME}_gencfg)
+target_compile_definitions(Submap3dOptimizer PUBLIC COLOR_OCTOMAP_SERVER)
+
+# submap3d_visualizer_node
+add_executable(submap3d_optimizer_node src/submap3d_optimizer.cpp)
+target_link_libraries(submap3d_optimizer_node Submap3dOptimizer ${LINK_LIBS})
+
+# ===================================================
 # Octomap color server
 # ===================================================
 add_library(${PROJECT_NAME}_color src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
