@@ -9,9 +9,9 @@ bool is_equal (double a, double b, double epsilon = 1.0e-7)
     return std::abs(a - b) < epsilon;
 }
 
-namespace octomap_server{
+namespace submap3d_visualizer{
 
-OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeHandle &nh_)
+Submap3dVisualizer::Submap3dVisualizer(const ros::NodeHandle private_nh_, const ros::NodeHandle &nh_)
 : m_nh(nh_),
   m_nh_private(private_nh_),
   m_pointCloudSub(NULL),
@@ -22,7 +22,6 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_tfPoseArraySub(NULL),
   m_tfPoseStampedSub(NULL),
   m_tfPosePointCloudSub(NULL),
-  m_reconfigureServer(m_config_mutex, private_nh_),
 
   m_SizePoses(0),
   m_global_pc_map_temp(new PCLPointCloud),
@@ -164,24 +163,24 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
 
   // tf listener
   m_tfPointCloudSub = new tf::MessageFilter<geometry_msgs::PoseArray> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
-  m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServer::insertCloudCallback, this, _1));
+  m_tfPointCloudSub->registerCallback(boost::bind(&Submap3dVisualizer::insertCloudCallback, this, _1));
   m_tfPoseArraySub = new tf::MessageFilter<geometry_msgs::PoseArray> (*m_poseArraySub, m_tfListener, m_worldFrameId, 5);
-  m_tfPoseArraySub->registerCallback(boost::bind(&OctomapServer::subNodePoseCallback, this, _1));
+  m_tfPoseArraySub->registerCallback(boost::bind(&Submap3dVisualizer::subNodePoseCallback, this, _1));
   m_tfPoseStampedSub = new tf::MessageFilter<geometry_msgs::PoseArray> (*m_poseStampedSub, m_tfListener, m_worldFrameId, 5);
-  m_tfPoseStampedSub->registerCallback(boost::bind(&OctomapServer::insertSubmap3dposeCallback, this, _1));
+  m_tfPoseStampedSub->registerCallback(boost::bind(&Submap3dVisualizer::insertSubmap3dposeCallback, this, _1));
   m_tfPosePointCloudSub = new tf::MessageFilter<octomap_server::PosePointCloud2> (*m_posePointCloudSub, m_tfListener, m_worldFrameId, 5);
-  m_tfPosePointCloudSub->registerCallback(boost::bind(&OctomapServer::subNodeMapCallback, this, _1));
+  m_tfPosePointCloudSub->registerCallback(boost::bind(&Submap3dVisualizer::subNodeMapCallback, this, _1));
 
 
   // service
-  m_octomapBinaryService = m_nh.advertiseService("octomap_binary", &OctomapServer::octomapBinarySrv, this);
-  m_octomapFullService = m_nh.advertiseService("octomap_full", &OctomapServer::octomapFullSrv, this);
-  m_clearBBXService = m_nh_private.advertiseService("clear_bbx", &OctomapServer::clearBBXSrv, this);
-  m_resetService = m_nh_private.advertiseService("reset", &OctomapServer::resetSrv, this);
+  m_octomapBinaryService = m_nh.advertiseService("octomap_binary", &Submap3dVisualizer::octomapBinarySrv, this);
+  m_octomapFullService = m_nh.advertiseService("octomap_full", &Submap3dVisualizer::octomapFullSrv, this);
+  m_clearBBXService = m_nh_private.advertiseService("clear_bbx", &Submap3dVisualizer::clearBBXSrv, this);
+  m_resetService = m_nh_private.advertiseService("reset", &Submap3dVisualizer::resetSrv, this);
 
 }
 
-OctomapServer::~OctomapServer(){
+Submap3dVisualizer::~Submap3dVisualizer(){
   if (m_tfPointCloudSub){
     delete m_tfPointCloudSub;
     m_tfPointCloudSub = NULL;
@@ -220,7 +219,7 @@ OctomapServer::~OctomapServer(){
 }
 
 // pointcloud map building
-void OctomapServer::insertSubmap3dposeCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
+void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
   ros::WallTime startTime = ros::WallTime::now();
   ROS_INFO("pointcloud get pose array sized %zu", pose_array->poses.size());
   unsigned node_id_now = pose_array->poses.size();
@@ -256,7 +255,7 @@ void OctomapServer::insertSubmap3dposeCallback(const geometry_msgs::PoseArray::C
 }
 
 // octomap map building
-void OctomapServer::insertCloudCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
+void Submap3dVisualizer::insertCloudCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
   ros::WallTime startTime = ros::WallTime::now();
   ROS_INFO("octomap get pose array sized %zu", pose_array->poses.size());
   unsigned node_id_now = pose_array->poses.size();
@@ -311,7 +310,7 @@ void OctomapServer::insertCloudCallback(const geometry_msgs::PoseArray::ConstPtr
 }
 
 // temp map building
-void OctomapServer::subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
+void Submap3dVisualizer::subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
 /*
   ros::WallTime startTime = ros::WallTime::now();
   ROS_INFO("Get pose array sized %zu", pose_array->poses.size());
@@ -352,7 +351,7 @@ void OctomapServer::subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr
 */
 }
 
-void OctomapServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
+void Submap3dVisualizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
 {
   ros::WallTime startTime = ros::WallTime::now();
 	PCLPointCloud::Ptr src(new PCLPointCloud);
@@ -384,7 +383,7 @@ void OctomapServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PC
 }
 
 // posepointcloud input callback,  insert Node to NodeGraph
-void OctomapServer::subNodeMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud){
+void Submap3dVisualizer::subNodeMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud){
   ros::WallTime startTime = ros::WallTime::now();
   PCLPointCloud::Ptr pc (new PCLPointCloud);
   pcl::fromROSMsg(pose_pointcloud->cloud, *pc);
@@ -398,7 +397,7 @@ void OctomapServer::subNodeMapCallback(const octomap_server::PosePointCloud2::Co
 }
 
 // processing one pointcloud input
-void OctomapServer::insertPC(const Pose& sensorOrigin, const PCLPointCloud& nonground){
+void Submap3dVisualizer::insertPC(const Pose& sensorOrigin, const PCLPointCloud& nonground){
   ros::WallTime startTime = ros::WallTime::now();
 
   octomap::Pointcloud cloud_octo;
@@ -417,7 +416,7 @@ void OctomapServer::insertPC(const Pose& sensorOrigin, const PCLPointCloud& nong
 }
 
 // processing one pointcloud input
-void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& nonground){
+void Submap3dVisualizer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCloud& nonground){
   point3d sensorOrigin = pointTfToOctomap(sensorOriginTf);
 
   if (!m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMin)
@@ -481,7 +480,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 }
 
 // publish stored poses and optimized local submap
-void OctomapServer::publishPCmap3d(const ros::Time& rostime){
+void Submap3dVisualizer::publishPCmap3d(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   bool publishPCmap3d = (m_latchedTopics || m_map3dPub.getNumSubscribers() > 0);
 
@@ -497,7 +496,7 @@ void OctomapServer::publishPCmap3d(const ros::Time& rostime){
   ROS_INFO("PointClouldMap3d publishing in visualizer took %f sec", total_elapsed);
 }
 
-void OctomapServer::publishOCTmap3d(const ros::Time& rostime){
+void Submap3dVisualizer::publishOCTmap3d(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   size_t octomapSize = m_octree->size();
   if (octomapSize <= 1){
@@ -601,7 +600,7 @@ void OctomapServer::publishOCTmap3d(const ros::Time& rostime){
   ROS_INFO("OctoMap3d publishing in visualizer took %f sec", total_elapsed);
 }
 
-void OctomapServer::publishBinaryOctoMap(const ros::Time& rostime) const{
+void Submap3dVisualizer::publishBinaryOctoMap(const ros::Time& rostime) const{
 
   Octomap map;
   map.header.frame_id = m_worldFrameId;
@@ -613,7 +612,7 @@ void OctomapServer::publishBinaryOctoMap(const ros::Time& rostime) const{
     ROS_ERROR("Error serializing OctoMap");
 }
 
-void OctomapServer::publishFullOctoMap(const ros::Time& rostime) const{
+void Submap3dVisualizer::publishFullOctoMap(const ros::Time& rostime) const{
 
   Octomap map;
   map.header.frame_id = m_worldFrameId;
@@ -627,7 +626,7 @@ void OctomapServer::publishFullOctoMap(const ros::Time& rostime) const{
 }
 
 
-bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
+bool Submap3dVisualizer::octomapBinarySrv(OctomapSrv::Request  &req,
                                     OctomapSrv::Response &res)
 {
   ros::WallTime startTime = ros::WallTime::now();
@@ -642,7 +641,7 @@ bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
   return true;
 }
 
-bool OctomapServer::octomapFullSrv(OctomapSrv::Request  &req,
+bool Submap3dVisualizer::octomapFullSrv(OctomapSrv::Request  &req,
                                     OctomapSrv::Response &res)
 {
   ROS_INFO("Sending full map data on service request");
@@ -656,7 +655,7 @@ bool OctomapServer::octomapFullSrv(OctomapSrv::Request  &req,
   return true;
 }
 
-bool OctomapServer::clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp){
+bool Submap3dVisualizer::clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp){
   point3d min = pointMsgToOctomap(req.min);
   point3d max = pointMsgToOctomap(req.max);
 
@@ -675,7 +674,7 @@ bool OctomapServer::clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp){
   return true;
 }
 
-bool OctomapServer::resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp) {
+bool Submap3dVisualizer::resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp) {
   visualization_msgs::MarkerArray occupiedNodesVis;
   occupiedNodesVis.markers.resize(m_treeDepth +1);
   ros::Time rostime = ros::Time::now();
@@ -693,7 +692,7 @@ bool OctomapServer::resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Res
   return true;
 }
 
-void OctomapServer::handlePreNodeTraversal(const ros::Time& rostime){
+void Submap3dVisualizer::handlePreNodeTraversal(const ros::Time& rostime){
   if (m_publish2DMap){
     // init projected 2D map:
     m_gridmap.header.frame_id = m_worldFrameId;
@@ -803,41 +802,41 @@ void OctomapServer::handlePreNodeTraversal(const ros::Time& rostime){
 
 }
 
-void OctomapServer::handlePostNodeTraversal(const ros::Time& rostime){
+void Submap3dVisualizer::handlePostNodeTraversal(const ros::Time& rostime){
 
   if (m_publish2DMap)
     m_projectedMapPub.publish(m_gridmap);
 }
 
-void OctomapServer::handleOccupiedNode(const OcTreeT::iterator& it){
+void Submap3dVisualizer::handleOccupiedNode(const OcTreeT::iterator& it){
 
   if (m_publish2DMap && m_projectCompleteMap){
     update2DMap(it, true);
   }
 }
 
-void OctomapServer::handleFreeNode(const OcTreeT::iterator& it){
+void Submap3dVisualizer::handleFreeNode(const OcTreeT::iterator& it){
 
   if (m_publish2DMap && m_projectCompleteMap){
     update2DMap(it, false);
   }
 }
 
-void OctomapServer::handleOccupiedNodeInBBX(const OcTreeT::iterator& it){
+void Submap3dVisualizer::handleOccupiedNodeInBBX(const OcTreeT::iterator& it){
 
   if (m_publish2DMap && !m_projectCompleteMap){
     update2DMap(it, true);
   }
 }
 
-void OctomapServer::handleFreeNodeInBBX(const OcTreeT::iterator& it){
+void Submap3dVisualizer::handleFreeNodeInBBX(const OcTreeT::iterator& it){
 
   if (m_publish2DMap && !m_projectCompleteMap){
     update2DMap(it, false);
   }
 }
 
-void OctomapServer::update2DMap(const OcTreeT::iterator& it, bool occupied){
+void Submap3dVisualizer::update2DMap(const OcTreeT::iterator& it, bool occupied){
 
   // update 2D map (occupied always overrides):
 
@@ -870,7 +869,7 @@ void OctomapServer::update2DMap(const OcTreeT::iterator& it, bool occupied){
 
 
 
-bool OctomapServer::isSpeckleNode(const OcTreeKey&nKey) const {
+bool Submap3dVisualizer::isSpeckleNode(const OcTreeKey&nKey) const {
   OcTreeKey key;
   bool neighborFound = false;
   for (key[2] = nKey[2] - 1; !neighborFound && key[2] <= nKey[2] + 1; ++key[2]){
@@ -891,7 +890,7 @@ bool OctomapServer::isSpeckleNode(const OcTreeKey&nKey) const {
 }
 
 
-void OctomapServer::adjustMapData(nav_msgs::OccupancyGrid& map, const nav_msgs::MapMetaData& oldMapInfo) const{
+void Submap3dVisualizer::adjustMapData(nav_msgs::OccupancyGrid& map, const nav_msgs::MapMetaData& oldMapInfo) const{
   if (map.info.resolution != oldMapInfo.resolution){
     ROS_ERROR("Resolution of map changed, cannot be adjusted");
     return;
@@ -932,7 +931,7 @@ void OctomapServer::adjustMapData(nav_msgs::OccupancyGrid& map, const nav_msgs::
 }
 
 
-std_msgs::ColorRGBA OctomapServer::heightMapColor(double h) {
+std_msgs::ColorRGBA Submap3dVisualizer::heightMapColor(double h) {
 
   std_msgs::ColorRGBA color;
   color.a = 1.0;

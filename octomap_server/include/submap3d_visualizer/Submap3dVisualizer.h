@@ -45,8 +45,6 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_srvs/Empty.h>
-#include <dynamic_reconfigure/server.h>
-#include <octomap_server/OctomapServerConfig.h>
 
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
@@ -72,14 +70,14 @@
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
 
-//#define COLOR_OCTOMAP_SERVER // switch color here - easier maintenance, only maintain OctomapServer. Two targets are defined in the cmake, octomap_server_color and octomap_server. One has this defined, and the other doesn't
+//#define COLOR_OCTOMAP_SERVER // switch color here - easier maintenance, only maintain Submap3dVisualizer. Two targets are defined in the cmake, submap3d_visualizer_color and submap3d_visualizer. One has this defined, and the other doesn't
 
 #ifdef COLOR_OCTOMAP_SERVER
 #include <octomap/ColorOcTree.h>
 #endif
 
-namespace octomap_server {
-class OctomapServer {
+namespace submap3d_visualizer {
+class Submap3dVisualizer {
 
 public:
 #ifdef COLOR_OCTOMAP_SERVER
@@ -98,8 +96,8 @@ public:
   typedef std::pair<Pose,PCLPointCloud::Ptr> PoseCloud;
   typedef std::pair<int,PoseCloud> Node;
 
-  OctomapServer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
-  virtual ~OctomapServer();
+  Submap3dVisualizer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
+  virtual ~Submap3dVisualizer();
   virtual bool octomapBinarySrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
   virtual bool octomapFullSrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
   bool clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp);
@@ -132,7 +130,6 @@ protected:
             && key[1] <= m_updateBBXMax[1]);
   }
 
-  void reconfigureCallback(octomap_server::OctomapServerConfig& config, uint32_t level);
   void publishBinaryOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   virtual void publishOCTmap3d(const ros::Time& rostime = ros::Time::now());
@@ -229,8 +226,6 @@ protected:
 
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;
-  boost::recursive_mutex m_config_mutex;
-  dynamic_reconfigure::Server<OctomapServerConfig> m_reconfigureServer;
 
   OcTreeT* m_octree;
   octomap::KeyRay m_keyRay;  // temp storage for ray casting

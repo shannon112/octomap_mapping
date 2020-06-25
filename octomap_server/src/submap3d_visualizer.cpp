@@ -4,7 +4,7 @@
 #define USAGE "\nUSAGE: octomap_server <map.[bt|ot]>\n" \
         "  map.bt: inital octomap 3D map file to read\n"
 
-using namespace octomap_server;
+using namespace submap3d_visualizer;
 
 int main(int argc, char** argv){
   ros::init(argc, argv, "submap3d_visualizer");
@@ -17,7 +17,7 @@ int main(int argc, char** argv){
     exit(-1);
   }
 
-  OctomapServer server(private_nh, nh);
+  Submap3dVisualizer server(private_nh, nh);
   ros::spinOnce();
 
   try{
