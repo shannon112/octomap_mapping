@@ -61,16 +61,27 @@ if poses_original is not None:
   plot.plot(poses_original[:, 0], poses_original[:, 1], poses_original[:, 2],
             '-', alpha=0.5, color="green")
   plot.title('Original')
+
+  axes.set_xlabel('X axis')
+  axes.set_ylabel('Y axis')
+  axes.set_zlabel('Z axis')
+  axes.legend()
+
   if options.axes_equal:
     axes.set_aspect('equal')
     set_axes_equal(axes)
-
 
 if poses_optimized is not None:
   axes = plot.subplot(1, 2, 2, projection='3d')
   plot.plot(poses_optimized[:, 0], poses_optimized[:, 1], poses_optimized[:, 2],
             '-', alpha=0.5, color="blue")
   plot.title('Optimized')
+
+  axes.set_xlabel('X axis')
+  axes.set_ylabel('Y axis')
+  axes.set_zlabel('Z axis')
+  axes.legend()
+
   if options.axes_equal:
     axes.set_aspect('equal')
     set_axes_equal(plot.gca())

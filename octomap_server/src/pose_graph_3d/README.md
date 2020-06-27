@@ -45,10 +45,14 @@ The executable `pose_graph_3d` expects the first argument to be the path to the
 problem definition. To run the executable,
 ```
 /path/to/bin/pose_graph_3d /path/to/dataset/dataset.g2o
+cd ~/Documents/temp-catkin-ws/devel_isolated/octomap_server/lib/octomap_server
+./pose_graph_3d --input ~/mit_cartographer.g2o
 ```
 
 A script is provided to visualize the resulting output files. There is also an
 option to enable equal axes using ```--axes_equal```.
 ```
 /path/to/repo/examples/slam/pose_graph_3d/plot_results.py --optimized_poses ./poses_optimized.txt --initial_poses ./poses_original.txt
+cd /home/shannon/Documents/temp-catkin-ws/src/octomap_mapping/octomap_server/scripts
+python plot_posegraph3d_results.py --optimized_poses ~/Documents/temp-catkin-ws/devel_isolated/octomap_server/lib/octomap_server/poses_optimized.txt --initial_poses ~/Documents/temp-catkin-ws/devel_isolated/octomap_server/lib/octomap_server/poses_original.txt -e
 ```

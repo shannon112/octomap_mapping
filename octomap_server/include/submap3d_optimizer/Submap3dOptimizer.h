@@ -37,6 +37,8 @@
 #include <unordered_map>
 #include <cmath>
 #include <pose_graph_3d/types.h>
+#include <fstream>
+#include <iostream>
 
 // #include <moveit_msgs/CollisionObject.h>
 // #include <moveit_msgs/CollisionMap.h>

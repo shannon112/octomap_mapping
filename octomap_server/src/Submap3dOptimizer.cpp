@@ -224,10 +224,11 @@ void Submap3dOptimizer::subSubmapMapCallback(const octomap_server::PosePointClou
   return;
 }
 
-// octomap map building
-void Submap3dOptimizer::constraintCallback(const visualization_msgs::MarkerArray::ConstPtr& pose_array){
+// constraint building
+void Submap3dOptimizer::constraintCallback(const visualization_msgs::MarkerArray::ConstPtr& constraint_list){
   ros::WallTime startTime = ros::WallTime::now();
   ROS_INFO("enter constraintCallback");
+
   return;
 }
 
@@ -258,6 +259,41 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     }
   }
 
+  //initialize file i/o
+  std::fstream fout;
+  fout.open("mit_cartographer.g2o",std::ios::out); //write
+  if (!fout) return;
+  for (unsigned i=0; i<node_id_now; ++i){
+    Pose nowPose = pose_array->poses[i];
+    fout<<"VERTEX_SE3:QUAT "<<i<<" "<< nowPose.position.x<<" "<<nowPose.position.y<<" "<<nowPose.position.z<<" "<<
+          nowPose.orientation.x<<" "<<nowPose.orientation.y<<" "<<nowPose.orientation.z<<" "<<nowPose.orientation.w<<std::endl;
+  }
+  for (unsigned i=0; i<node_id_now; ++i){
+    if (i==0) continue; //no edge
+    Pose nowPose = pose_array->poses[i];
+    Pose prePose = pose_array->poses[i-1];
+    Pose deltaPose = Pose();
+
+    Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
+    Eigen::Quaterniond prePose_q(prePose.orientation.w, prePose.orientation.x, prePose.orientation.y, prePose.orientation.z);
+  	Eigen::Matrix3d prePose_R = prePose_q.toRotationMatrix();
+	  Eigen::Vector3d deltaPose_v (nowPose.position.x - prePose.position.x, 
+        nowPose.position.y - prePose.position.y, nowPose.position.z - prePose.position.z);
+    Eigen::Vector3d result_v = prePose_R.transpose()*deltaPose_v;
+    deltaPose.position.x = result_v.x();
+    deltaPose.position.y = result_v.y();
+    deltaPose.position.z = result_v.z();
+
+    Eigen::Quaterniond deltaPose_q = prePose_q.inverse()*nowPose_q;
+    deltaPose.orientation.x = deltaPose_q.x();
+    deltaPose.orientation.y = deltaPose_q.y();
+    deltaPose.orientation.z = deltaPose_q.z();
+    deltaPose.orientation.w = deltaPose_q.w();
+
+    fout<<"EDGE_SE3:QUAT "<<i-1<<" "<<i<<" "<< deltaPose.position.x<<" "<<deltaPose.position.y<<" "<<deltaPose.position.z<<" "<<deltaPose.orientation.x<<" "<<deltaPose.orientation.y<<" "<<deltaPose.orientation.z<<" "<<deltaPose.orientation.w;
+    fout<<" 1 0 0 0 0 0 "<<"1 0 0 0 0 "<<"1 0 0 0 "<<"4000 0 0 "<<"4000 0 "<<"4000"<<std::endl;
+  }
+  fout.close();
 }
 
 // sub nodemap callback, insert Nodemap to NodeGraph
@@ -278,18 +314,37 @@ void Submap3dOptimizer::subNodeMapCallback(const octomap_server::PosePointCloud2
 // publish stored poses and optimized local submap
 void Submap3dOptimizer::publishPoseArray(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
-  bool publishPCmap3d = (m_latchedTopics || m_poseArrayNewPub.getNumSubscribers() > 0);
+  bool publishPoseArray = (m_latchedTopics || m_poseArrayNewPub.getNumSubscribers() > 0);
 
-  if (publishPCmap3d){
-    sensor_msgs::PointCloud2 cloud;
-    pcl::toROSMsg (*m_global_pc_map, cloud);
-    cloud.header.frame_id = m_worldFrameId;
-    cloud.header.stamp = rostime;
-    m_poseArrayNewPub.publish(cloud);
+  /*
+  if (publishPoseArray){
+    geometry_msgs::PoseArray pose_array;
+
+    pose_array.poses.resize(node_poses.size());
+    //ROS_INFO("pose array size: %zu",node_poses.size());
+
+    int i = 0;
+    for (const auto& node_id_data : node_poses.trajectory(0)) {
+      if (!node_id_data.data.constant_pose_data.has_value()) {
+        continue;
+      }
+      //ROS_INFO("nodeid %d",node_id_data.id.node_index);
+      latest_pose_stamp = ToRos(node_id_data.data.constant_pose_data.value().time);
+      pose_array.poses[i] = ToGeometryMsgPose(node_id_data.data.global_pose);
+      ++i;
+    }
+    //if(i>0){ROS_INFO("last nodeid %d",(--node_poses.trajectory(0).end())->id.node_index);}
+
+    pose_array.header.stamp = rostime;
+    pose_array.header.frame_id = "/map";
+    return pose_array;
+
+    m_poseArrayNewPub.publish(pose_array);
   }
-
+  */
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("PointClouldMap3d publishing in visualizer took %f sec", total_elapsed);
+  return;
 }
 
 void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
