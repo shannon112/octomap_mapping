@@ -160,18 +160,23 @@ target_link_libraries(submap3d_visualizer_node Submap3dVisualizer ${LINK_LIBS})
 # ===================================================
 # Pointcloud  (global map optimizer)
 # ===================================================
+# pose graph lib
+add_library(PoseGraph3d src/pose_graph_3d/pose_graph_3d.cc)
+target_link_libraries(PoseGraph3d ${CERES_LIBRARIES} ${LINK_LIBS})
+
+# pose graph test
+add_executable(pose_graph_3d src/pose_graph_3d/pose_graph_3d_test.cc)
+target_link_libraries(pose_graph_3d PoseGraph3d ${CERES_LIBRARIES} ${LINK_LIBS})
+
+# submap3d_optimizer lib
 add_library(Submap3dOptimizer src/Submap3dOptimizer.cpp)
-target_link_libraries(Submap3dOptimizer ${LINK_LIBS})
+target_link_libraries(Submap3dOptimizer PoseGraph3d ${LINK_LIBS})
 add_dependencies(Submap3dOptimizer ${PROJECT_NAME}_gencfg)
 target_compile_definitions(Submap3dOptimizer PUBLIC COLOR_OCTOMAP_SERVER)
 
-# submap3d_visualizer_node
+# submap3d_optimizer_node
 add_executable(submap3d_optimizer_node src/submap3d_optimizer.cpp)
 target_link_libraries(submap3d_optimizer_node Submap3dOptimizer ${LINK_LIBS})
-
-# pose graph
-add_executable(pose_graph_3d src/pose_graph_3d/pose_graph_3d.cc)
-target_link_libraries(pose_graph_3d ${CERES_LIBRARIES} ${LINK_LIBS})
 
 # ===================================================
 # Octomap color server

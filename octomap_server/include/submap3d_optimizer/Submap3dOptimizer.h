@@ -36,9 +36,8 @@
 #include <std_msgs/ColorRGBA.h>
 #include <unordered_map>
 #include <cmath>
-#include <pose_graph_3d/types.h>
-#include <fstream>
-#include <iostream>
+
+#include "pose_graph_3d/pose_graph_3d.h"
 
 // #include <moveit_msgs/CollisionObject.h>
 // #include <moveit_msgs/CollisionMap.h>
@@ -193,6 +192,9 @@ protected:
 
   std::unordered_map<int, PoseCloud> NodeGraph;
   std::unordered_map<int, ceres::examples::Constraint3d> ConstraintGraph;
+
+  ceres::examples::MapOfPoses poses;
+  ceres::examples::VectorOfConstraints constraints;
 
   ros::WallTime previousTime;
 };

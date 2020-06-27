@@ -28,18 +28,7 @@
 //
 // Author: vitus@google.com (Michael Vitus)
 
-#include <iostream>
-#include <fstream>
-#include <string>
-
-#include "ceres/ceres.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
-#include "pose_graph_3d/read_g2o.h"
-#include "pose_graph_3d/pose_graph_3d_error_term.h"
-#include "pose_graph_3d/types.h"
-
-DEFINE_string(input, "", "The pose graph definition filename in g2o format.");
+#include <pose_graph_3d/pose_graph_3d.h>
 
 namespace ceres {
 namespace examples {
@@ -142,33 +131,3 @@ bool OutputPoses(const std::string& filename, const MapOfPoses& poses) {
 
 }  // namespace examples
 }  // namespace ceres
-
-int main(int argc, char** argv) {
-  google::InitGoogleLogging(argv[0]);
-  CERES_GFLAGS_NAMESPACE::ParseCommandLineFlags(&argc, &argv, true);
-
-  CHECK(FLAGS_input != "") << "Need to specify the filename to read.";
-
-  ceres::examples::MapOfPoses poses;
-  ceres::examples::VectorOfConstraints constraints;
-
-  CHECK(ceres::examples::ReadG2oFile(FLAGS_input, &poses, &constraints))
-      << "Error reading the file: " << FLAGS_input;
-
-  std::cout << "Number of poses: " << poses.size() << '\n';
-  std::cout << "Number of constraints: " << constraints.size() << '\n';
-
-  CHECK(ceres::examples::OutputPoses("poses_original.txt", poses))
-      << "Error outputting to poses_original.txt";
-
-  ceres::Problem problem;
-  ceres::examples::BuildOptimizationProblem(constraints, &poses, &problem);
-
-  CHECK(ceres::examples::SolveOptimizationProblem(&problem))
-      << "The solve was not successful, exiting.";
-
-  CHECK(ceres::examples::OutputPoses("poses_optimized.txt", poses))
-      << "Error outputting to poses_original.txt";
-
-  return 0;
-}

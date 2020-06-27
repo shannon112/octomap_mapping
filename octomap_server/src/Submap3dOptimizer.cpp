@@ -229,6 +229,11 @@ void Submap3dOptimizer::constraintCallback(const visualization_msgs::MarkerArray
   ros::WallTime startTime = ros::WallTime::now();
   ROS_INFO("enter constraintCallback");
 
+  ceres::Problem problem;
+  ceres::examples::BuildOptimizationProblem(constraints, &poses, &problem);
+  ceres::examples::SolveOptimizationProblem(&problem);
+  ceres::examples::OutputPoses("poses_optimized.txt", poses);
+
   return;
 }
 
@@ -293,6 +298,10 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     fout<<"EDGE_SE3:QUAT "<<i-1<<" "<<i<<" "<< deltaPose.position.x<<" "<<deltaPose.position.y<<" "<<deltaPose.position.z<<" "<<deltaPose.orientation.x<<" "<<deltaPose.orientation.y<<" "<<deltaPose.orientation.z<<" "<<deltaPose.orientation.w;
     fout<<" 1 0 0 0 0 0 "<<"1 0 0 0 0 "<<"1 0 0 0 "<<"4000 0 0 "<<"4000 0 "<<"4000"<<std::endl;
   }
+
+  std::cout << "Number of poses: " << poses.size() << '\n';
+  std::cout << "Number of constraints: " << constraints.size() << '\n';
+
   fout.close();
 }
 
