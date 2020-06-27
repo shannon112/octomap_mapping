@@ -41,6 +41,7 @@
 namespace ceres {
 namespace examples {
 
+
 // Reads a single pose from the input and inserts it into the map. Returns false
 // if there is a duplicate entry.
 template <typename Pose, typename Allocator>

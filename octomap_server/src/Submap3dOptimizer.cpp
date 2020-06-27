@@ -234,6 +234,9 @@ void Submap3dOptimizer::constraintCallback(const visualization_msgs::MarkerArray
   ceres::examples::SolveOptimizationProblem(&problem);
   ceres::examples::OutputPoses("poses_optimized.txt", poses);
 
+  //poses->clear();
+  //constraints->clear();
+
   return;
 }
 
@@ -270,6 +273,55 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
   if (!fout) return;
   for (unsigned i=0; i<node_id_now; ++i){
     Pose nowPose = pose_array->poses[i];
+    InsertVertex(i, nowPose);
+  }
+  for (unsigned i=0; i<node_id_now; ++i){
+    if (i==0) continue; //no edge
+    Pose nowPose = pose_array->poses[i];
+    Pose prePose = pose_array->poses[i-1];
+    Pose deltaPose = Pose();
+
+    Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
+    Eigen::Quaterniond prePose_q(prePose.orientation.w, prePose.orientation.x, prePose.orientation.y, prePose.orientation.z);
+  	Eigen::Matrix3d prePose_R = prePose_q.toRotationMatrix();
+	  Eigen::Vector3d deltaPose_v (nowPose.position.x - prePose.position.x, 
+        nowPose.position.y - prePose.position.y, nowPose.position.z - prePose.position.z);
+    Eigen::Vector3d result_v = prePose_R.transpose()*deltaPose_v;
+    deltaPose.position.x = result_v.x();
+    deltaPose.position.y = result_v.y();
+    deltaPose.position.z = result_v.z();
+
+    Eigen::Quaterniond deltaPose_q = prePose_q.inverse()*nowPose_q;
+    deltaPose.orientation.x = deltaPose_q.x();
+    deltaPose.orientation.y = deltaPose_q.y();
+    deltaPose.orientation.z = deltaPose_q.z();
+    deltaPose.orientation.w = deltaPose_q.w();
+
+    double *temp_info_matrix = new double[21]{1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,4000,0,0,4000,0,4000};
+    InsertConstraint(i-1, i, deltaPose, temp_info_matrix);
+  }
+
+  std::cout << "Number of poses: " << poses.size() << '\n';
+  std::cout << "Number of constraints: " << constraints.size() << '\n';
+
+  fout.close();
+}
+
+
+// sub nodemap poses callback, constraint tag to ConstraintGraph, output .txt for testing
+/*
+void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
+  ros::WallTime startTime = ros::WallTime::now();
+  ROS_INFO("get pose array sized %zu", pose_array->poses.size());
+  unsigned node_id_now = pose_array->poses.size();
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+
+  //initialize file i/o
+  std::fstream fout;
+  fout.open("mit_cartographer.g2o",std::ios::out); //write
+  if (!fout) return;
+  for (unsigned i=0; i<node_id_now; ++i){
+    Pose nowPose = pose_array->poses[i];
     fout<<"VERTEX_SE3:QUAT "<<i<<" "<< nowPose.position.x<<" "<<nowPose.position.y<<" "<<nowPose.position.z<<" "<<
           nowPose.orientation.x<<" "<<nowPose.orientation.y<<" "<<nowPose.orientation.z<<" "<<nowPose.orientation.w<<std::endl;
   }
@@ -299,11 +351,9 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     fout<<" 1 0 0 0 0 0 "<<"1 0 0 0 0 "<<"1 0 0 0 "<<"4000 0 0 "<<"4000 0 "<<"4000"<<std::endl;
   }
 
-  std::cout << "Number of poses: " << poses.size() << '\n';
-  std::cout << "Number of constraints: " << constraints.size() << '\n';
-
   fout.close();
 }
+*/
 
 // sub nodemap callback, insert Nodemap to NodeGraph
 void Submap3dOptimizer::subNodeMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud){
@@ -398,6 +448,66 @@ void Submap3dOptimizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, cons
   }
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("After registration using ICP pointcloud size: %d, time cost: %f(s), converged: %d", output->size(), total_elapsed, icp.hasConverged());
+}
+
+
+// Reads a single pose from the input and inserts it into the map. Returns false
+// if there is a duplicate entry.
+bool Submap3dOptimizer::InsertVertex(const int &id, const Pose &vertex){
+
+  // Ensure we don't have duplicate poses.
+  if (poses.find(id) != poses.end()) {
+    ROS_WARN("Duplicate vertex with ID: %d", id);
+    return false;
+  }
+
+  ceres::examples::Pose3d vertex_ceres;
+  vertex_ceres.p.x() = vertex.position.x;
+  vertex_ceres.p.y() = vertex.position.y;
+  vertex_ceres.p.z() = vertex.position.z;
+
+  vertex_ceres.q.w() = vertex.orientation.w;
+  vertex_ceres.q.x() = vertex.orientation.x;
+  vertex_ceres.q.y() = vertex.orientation.y;
+  vertex_ceres.q.z() = vertex.orientation.z;
+
+  poses[id] = vertex_ceres;
+
+  return true;
+}
+
+// Reads the contraints between two vertices in the pose graph
+// the constrains would be parsing in 2d/3d types.h using SE2/3
+void Submap3dOptimizer::InsertConstraint(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix) {
+  double constraint_check_id = id_begin + 0.00001*id_end;
+  if (ConstraintCheck.find(constraint_check_id) != ConstraintCheck.end()) return;
+
+  ceres::examples::Constraint3d constraint;
+
+  constraint.id_begin = id_begin;
+  constraint.id_end = id_end;
+
+  constraint.t_be.p.x() = t_be.position.x;
+  constraint.t_be.p.y() = t_be.position.y;
+  constraint.t_be.p.z() = t_be.position.z;
+
+  constraint.t_be.q.w() = t_be.orientation.w;
+  constraint.t_be.q.x() = t_be.orientation.x;
+  constraint.t_be.q.y() = t_be.orientation.y;
+  constraint.t_be.q.z() = t_be.orientation.z;
+
+  int counter = 0;
+  for (int i = 0; i < 6; ++i) {
+    for (int j = i; j < 6; ++j) {
+      constraint.information(i, j) = info_matrix[counter];
+      ++counter;
+      if (i != j) {
+        constraint.information(j, i) = constraint.information(i, j);
+      }
+    }
+  }
+  constraints.push_back(constraint);
+  ConstraintCheck.insert(constraint_check_id);
 }
 
 }

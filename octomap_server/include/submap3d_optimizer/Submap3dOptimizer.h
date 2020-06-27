@@ -35,6 +35,7 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <std_msgs/ColorRGBA.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <cmath>
 
 #include "pose_graph_3d/pose_graph_3d.h"
@@ -117,6 +118,8 @@ protected:
 
   virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
   virtual float distance(const Pose &pose_target, const Pose &pose_source);
+  virtual bool InsertVertex(const int &id, const Pose &vertex);
+  virtual void InsertConstraint(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix);
 
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
@@ -191,7 +194,7 @@ protected:
   PCLPointCloud::Ptr m_global_pc_map_temp;
 
   std::unordered_map<int, PoseCloud> NodeGraph;
-  std::unordered_map<int, ceres::examples::Constraint3d> ConstraintGraph;
+  std::unordered_set<double> ConstraintCheck;
 
   ceres::examples::MapOfPoses poses;
   ceres::examples::VectorOfConstraints constraints;
