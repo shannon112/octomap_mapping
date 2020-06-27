@@ -35,6 +35,9 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <std_msgs/ColorRGBA.h>
 #include <unordered_map>
+#include <cmath>
+#include <pose_graph_3d/types.h>
+
 // #include <moveit_msgs/CollisionObject.h>
 // #include <moveit_msgs/CollisionMap.h>
 
@@ -45,6 +48,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_srvs/Empty.h>
+#include <cartographer_ros_msgs/SubmapList.h>
 
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
@@ -99,37 +103,37 @@ public:
   Submap3dOptimizer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
   virtual ~Submap3dOptimizer();
 
-  virtual void insertCloudCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
-  virtual void insertSubmap3dposeCallback(const geometry_msgs::PoseArray::ConstPtr& pose);
+  virtual void constraintCallback(const visualization_msgs::MarkerArray::ConstPtr& pose_array);
+  virtual void subSubmapPoseCallback(const cartographer_ros_msgs::SubmapList::ConstPtr& pose);
   virtual void subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
   virtual void subNodeMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
   virtual void subSubmapMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
 
 protected:
 
-  void publishBinaryOctoMap(const ros::Time& rostime = ros::Time::now()) const;
-  void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
-  virtual void publishPCmap3d(const ros::Time& rostime = ros::Time::now());
+  virtual void publishPoseArray(const ros::Time& rostime = ros::Time::now());
+  virtual void publishConstriant(const ros::Time& rostime = ros::Time::now());
+
   virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
+  virtual float distance(const Pose &pose_target, const Pose &pose_source);
 
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
-  ros::Publisher  m_map3dPub;
 
-  message_filters::Subscriber<geometry_msgs::PoseArray>* m_pointCloudSub;
+  ros::Publisher  m_poseArrayNewPub, m_constraintNewPub;
+  ros::Subscriber m_pointCloudSub;
+
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
-  message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseStampedSub;
+  message_filters::Subscriber<cartographer_ros_msgs::SubmapList>* m_poseStampedSub;
   message_filters::Subscriber<octomap_server::PosePointCloud2>* m_submapSub;
   message_filters::Subscriber<octomap_server::PosePointCloud2>* m_nodemapSub;
 
-  tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPointCloudSub;
   tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseArraySub;
-  tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseStampedSub;
+  tf::MessageFilter<cartographer_ros_msgs::SubmapList>* m_tfPoseStampedSub;
   tf::MessageFilter<octomap_server::PosePointCloud2>* m_tfSubmapSub;
   tf::MessageFilter<octomap_server::PosePointCloud2>* m_tfNodemapSub;
 
   tf::TransformListener m_tfListener;
-
 
   double m_maxRange;
   std::string m_worldFrameId; // the map frame
@@ -186,6 +190,7 @@ protected:
   PCLPointCloud::Ptr m_global_pc_map_temp;
 
   std::unordered_map<int, PoseCloud> NodeGraph;
+  std::unordered_map<int, ceres::examples::Constraint3d> ConstraintGraph;
 
   ros::WallTime previousTime;
 };

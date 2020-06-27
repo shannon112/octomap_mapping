@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 project(octomap_server)
 
 add_compile_options(-std=c++11)
+option(GFLAGS "Enable Google Flags." ON)
 
 set(PACKAGE_DEPENDENCIES
   roscpp
@@ -22,7 +23,7 @@ set(PACKAGE_DEPENDENCIES
 )
 
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})
-
+find_package(Ceres REQUIRED)
 find_package(octomap REQUIRED)
 add_definitions(-DOCTOMAP_NODEBUGOUT)
 
@@ -57,6 +58,53 @@ set(LINK_LIBS
   ${OCTOMAP_LIBRARIES}
   ${catkin_LIBRARIES}
 )
+
+# GFlags.
+if (GFLAGS)
+  # Don't search with REQUIRED as we can continue without gflags.
+  find_package(Gflags)
+  if (GFLAGS_FOUND)
+    message("-- Found Google Flags header in: ${GFLAGS_INCLUDE_DIRS}, "
+      "in namespace: ${GFLAGS_NAMESPACE}")
+    add_definitions(-DCERES_GFLAGS_NAMESPACE=${GFLAGS_NAMESPACE})
+  else (GFLAGS_FOUND)
+    message("-- Did not find Google Flags (gflags), Building without gflags "
+      "- no tests or tools will be built!")
+    update_cache_variable(GFLAGS OFF)
+  endif (GFLAGS_FOUND)
+else (GFLAGS)
+  message("-- Google Flags disabled; no tests or tools will be built!")
+  # Mark as advanced (remove from default GUI view) the gflags search
+  # variables in case user enabled GFLAGS, FindGflags did not find it, so
+  # made search variables visible in GUI for user to set, but then user disables
+  # GFLAGS instead of setting them.
+  mark_as_advanced(FORCE GFLAGS_INCLUDE_DIR
+                         GFLAGS_LIBRARY
+                         GFLAGS_NAMESPACE)
+endif (GFLAGS)
+
+if (GFLAGS)
+  include_directories(${GFLAGS_INCLUDE_DIRS})
+endif (GFLAGS)
+
+# Change the default build type from Debug to Release, while still
+# supporting overriding the build type.
+#
+# The CACHE STRING logic here and elsewhere is needed to force CMake
+# to pay attention to the value of these variables.
+if (NOT CMAKE_BUILD_TYPE)
+  message("-- No build type specified; defaulting to CMAKE_BUILD_TYPE=Release.")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING
+    "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
+    FORCE)
+else (NOT CMAKE_BUILD_TYPE)
+  if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message("\n=================================================================================")
+    message("\n-- Build type: Debug. Performance will be terrible!")
+    message("-- Add -DCMAKE_BUILD_TYPE=Release to the CMake command line to get an optimized build.")
+    message("\n=================================================================================")
+  endif (CMAKE_BUILD_TYPE STREQUAL "Debug")
+endif (NOT CMAKE_BUILD_TYPE)
 
 # ===================================================
 # Octomap server
@@ -120,6 +168,10 @@ target_compile_definitions(Submap3dOptimizer PUBLIC COLOR_OCTOMAP_SERVER)
 # submap3d_visualizer_node
 add_executable(submap3d_optimizer_node src/submap3d_optimizer.cpp)
 target_link_libraries(submap3d_optimizer_node Submap3dOptimizer ${LINK_LIBS})
+
+# pose graph
+add_executable(pose_graph_3d src/pose_graph_3d/pose_graph_3d.cc)
+target_link_libraries(pose_graph_3d ${CERES_LIBRARIES} ${LINK_LIBS})
 
 # ===================================================
 # Octomap color server
