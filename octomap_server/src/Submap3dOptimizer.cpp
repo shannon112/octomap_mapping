@@ -232,11 +232,12 @@ void Submap3dOptimizer::constraintCallback(const visualization_msgs::MarkerArray
   ceres::Problem problem;
   ceres::examples::BuildOptimizationProblem(constraints, &poses, &problem);
   ceres::examples::SolveOptimizationProblem(&problem);
-  ceres::examples::OutputPoses("poses_optimized.txt", poses);
+  //ceres::examples::OutputPoses("poses_optimized.txt", poses);
 
   //poses->clear();
   //constraints->clear();
-
+  publishPoseArray();
+  publishConstriant();
   return;
 }
 
@@ -375,41 +376,84 @@ void Submap3dOptimizer::publishPoseArray(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   bool publishPoseArray = (m_latchedTopics || m_poseArrayNewPub.getNumSubscribers() > 0);
 
-  /*
+  geometry_msgs::PoseArray pose_array;
+  pose_array.poses.resize(poses.size());
+
   if (publishPoseArray){
-    geometry_msgs::PoseArray pose_array;
-
-    pose_array.poses.resize(node_poses.size());
-    //ROS_INFO("pose array size: %zu",node_poses.size());
-
-    int i = 0;
-    for (const auto& node_id_data : node_poses.trajectory(0)) {
-      if (!node_id_data.data.constant_pose_data.has_value()) {
-        continue;
-      }
-      //ROS_INFO("nodeid %d",node_id_data.id.node_index);
-      latest_pose_stamp = ToRos(node_id_data.data.constant_pose_data.value().time);
-      pose_array.poses[i] = ToGeometryMsgPose(node_id_data.data.global_pose);
-      ++i;
+    for (auto poses_iter=poses.begin(); poses_iter != poses.end(); ++poses_iter){
+      auto pair = *poses_iter;
+      pose_array.poses[pair.first].position.x = pair.second.p.x();
+      pose_array.poses[pair.first].position.y = pair.second.p.y();
+      pose_array.poses[pair.first].position.z = pair.second.p.z();
+      pose_array.poses[pair.first].orientation.x = pair.second.q.x();
+      pose_array.poses[pair.first].orientation.y = pair.second.q.y();
+      pose_array.poses[pair.first].orientation.z = pair.second.q.z();
+      pose_array.poses[pair.first].orientation.w = pair.second.q.w();
     }
-    //if(i>0){ROS_INFO("last nodeid %d",(--node_poses.trajectory(0).end())->id.node_index);}
 
     pose_array.header.stamp = rostime;
     pose_array.header.frame_id = "/map";
-    return pose_array;
-
     m_poseArrayNewPub.publish(pose_array);
   }
-  */
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  ROS_INFO("PointClouldMap3d publishing in visualizer took %f sec", total_elapsed);
+  ROS_INFO("New poseArray publishing in optimizer took %f sec", total_elapsed);
   return;
 }
 
 void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
+  bool publishConstriant = (m_latchedTopics || m_constraintNewPub.getNumSubscribers() > 0);
+  visualization_msgs::MarkerArray constraint_list_new;
 
+  if (publishConstriant){
+
+    visualization_msgs::Marker line_list;
+    line_list.header.frame_id = "/map";
+    line_list.header.stamp = ros::Time::now();
+    line_list.ns = "points_and_lines";
+    line_list.action = visualization_msgs::Marker::ADD;
+    line_list.pose.orientation.w = 1.0;
+    line_list.pose.position.z = 0.1;
+    line_list.id = 10;
+
+    // type of marker!!
+    line_list.type = visualization_msgs::Marker::LINE_LIST; 
+    // LINE_STRIP/LINE_LIST markers use only the x component of scale, for the line width
+    line_list.scale.x = 0.025;
+
+    // Create the vertices for the points and lines
+    for (auto iter=constraints.begin(); iter!=constraints.end(); ++iter){
+      auto p1_iter = poses.find(iter->id_begin);
+      geometry_msgs::Point p1;
+      p1.x = p1_iter->second.p.x();
+      p1.y = p1_iter->second.p.y();
+      p1.z = p1_iter->second.p.z();
+      auto p2_iter = poses.find(iter->id_end);
+      geometry_msgs::Point p2;
+      p2.x = p2_iter->second.p.x();
+      p2.y = p2_iter->second.p.y();
+      p2.z = p2_iter->second.p.z();
+
+      // Line list is pink
+      std_msgs::ColorRGBA c;
+      c.r = 253.0/255.0;
+      c.g = 31.0/255.0;
+      c.b = 246.0/255.0;
+      c.a = 0.83;
+
+      // The line list needs two points for each line
+      line_list.points.push_back(p1);
+      line_list.points.push_back(p2);
+      line_list.colors.push_back(c);
+      line_list.colors.push_back(c);
+    }
+    constraint_list_new.markers.push_back(line_list);
+    m_constraintNewPub.publish(constraint_list_new);
+  }
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+  ROS_INFO("New constraints publishing in optimizer took %f sec", total_elapsed);
 }
+
 
 float Submap3dOptimizer::distance(const Pose &pose_target, const Pose &pose_source){
   float x_delta = pow(pose_target.position.x - pose_source.position.x, 2);
@@ -476,14 +520,17 @@ bool Submap3dOptimizer::InsertVertex(const int &id, const Pose &vertex){
   return true;
 }
 
+
 // Reads the contraints between two vertices in the pose graph
 // the constrains would be parsing in 2d/3d types.h using SE2/3
 void Submap3dOptimizer::InsertConstraint(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix) {
   double constraint_check_id = id_begin + 0.00001*id_end;
-  if (ConstraintCheck.find(constraint_check_id) != ConstraintCheck.end()) return;
+  if (ConstraintCheck.find(constraint_check_id) != ConstraintCheck.end()) {
+    ROS_WARN("Duplicate constraint with ID: %f", constraint_check_id);
+    return;
+  }
 
   ceres::examples::Constraint3d constraint;
-
   constraint.id_begin = id_begin;
   constraint.id_end = id_end;
 

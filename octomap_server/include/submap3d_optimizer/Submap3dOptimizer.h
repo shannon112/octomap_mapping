@@ -51,6 +51,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <std_srvs/Empty.h>
 #include <cartographer_ros_msgs/SubmapList.h>
+#include <std_msgs/ColorRGBA.h>
 
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
