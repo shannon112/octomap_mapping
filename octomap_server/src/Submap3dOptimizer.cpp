@@ -266,6 +266,7 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     InsertVertex(i, nowPose);
   }
 
+  /*
   // pose graph add constraint: pose and next pose from pose array
   for (unsigned i=0; i<node_id_now; ++i){
     if (i==0) continue; //no edge
@@ -292,6 +293,7 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     double *temp_info_matrix = new double[21]{1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,4000,0,0,4000,0,4000};
     InsertConstraint(i-1, i, deltaPose, temp_info_matrix);
   }
+  */
 
   // pose graph add constraint: pose and next pose from icp
   for (unsigned i=0; i<node_id_now; ++i){
@@ -501,19 +503,28 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
 
   if (publishConstriant){
 
-    visualization_msgs::Marker line_list;
-    line_list.header.frame_id = "/map";
-    line_list.header.stamp = ros::Time::now();
-    line_list.ns = "points_and_lines";
-    line_list.action = visualization_msgs::Marker::ADD;
+    visualization_msgs::Marker line_list, points;
+    line_list.header.frame_id = points.header.frame_id = "/map";
+    line_list.header.stamp = points.header.stamp = ros::Time::now();
+    line_list.ns = "lines";
+    points.ns = "points";
+    line_list.action = points.action = visualization_msgs::Marker::ADD;
     line_list.pose.orientation.w = 1.0;
     line_list.pose.position.z = 0.1;
+    points.pose.orientation.w = 1.0;
+    points.pose.position.z = 0.1;
+
+    points.id = 11;
     line_list.id = 10;
 
     // type of marker!!
     line_list.type = visualization_msgs::Marker::LINE_LIST; 
+    points.type = visualization_msgs::Marker::POINTS; 
+
     // LINE_STRIP/LINE_LIST markers use only the x component of scale, for the line width
     line_list.scale.x = 0.025;
+    points.scale.x = 0.025;
+    points.scale.y = 0.025;
 
     // Create the vertices for the points and lines
     for (auto iter=constraints.begin(); iter!=constraints.end(); ++iter){
@@ -562,8 +573,15 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
       line_list.points.push_back(p2);
       line_list.colors.push_back(c);
       line_list.colors.push_back(c);
+      points.points.push_back(p1);
+      c.r = 155.0/255.0;
+      c.g = 12.0/255.0;
+      c.b = 129.0/255.0;
+      points.colors.push_back(c);
+
     }
     constraint_list_new.markers.push_back(line_list);
+    constraint_list_new.markers.push_back(points);
     m_constraintNewPub.publish(constraint_list_new);
   }
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
