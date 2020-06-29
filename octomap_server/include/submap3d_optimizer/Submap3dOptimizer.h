@@ -120,10 +120,9 @@ protected:
 
   virtual bool PairwiseICP_T(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, Eigen::Matrix4d &output_trans );
   virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
-  virtual float distance(const Pose &pose_target, const Pose &pose_source);
+  virtual float TwoPoseDistance(const Pose &pose_target, const Pose &pose_source);
   virtual bool InsertVertex(const int &id, const Pose &vertex);
   virtual void InsertConstraint(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix);
-  virtual void InsertConstraint_icp(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix);
 
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
@@ -189,20 +188,12 @@ protected:
   bool m_useColoredMap;
 
   // pose array
-  unsigned m_SizePoses;
-  Pose last_pose;
-  std::vector<Pose> m_Poses;
-  std::vector<PCLPointCloud::Ptr> m_local_pc_maps;
-
   PCLPointCloud::Ptr m_global_pc_map;
   PCLPointCloud::Ptr m_global_pc_map_temp;
 
-  Pose* pose_array_stored;
-
+  std::vector<Pose> m_Poses; //for debug
   std::unordered_map<int, PoseCloud> NodeGraph;
   std::unordered_set<double> ConstraintCheck;
-  std::unordered_set<double> ConstraintCheck_icp;
-
   ceres::examples::MapOfPoses poses;
   ceres::examples::VectorOfConstraints constraints;
 

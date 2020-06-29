@@ -25,7 +25,6 @@ Submap3dOptimizer::Submap3dOptimizer(const ros::NodeHandle private_nh_, const ro
   m_tfSubmapSub(NULL),
   m_tfNodemapSub(NULL),
 
-  m_SizePoses(0),
   m_global_pc_map_temp(new PCLPointCloud),
   m_global_pc_map(new PCLPointCloud),
   m_maxRange(-1.0),
@@ -212,12 +211,14 @@ Submap3dOptimizer::~Submap3dOptimizer(){
 
 }
 
+
 // no used now
 void Submap3dOptimizer::subSubmapPoseCallback(const cartographer_ros_msgs::SubmapList::ConstPtr& pose_array){
   ros::WallTime startTime = ros::WallTime::now();
   ROS_INFO("enter subSubmapPoseCallback");
   return;
 }
+
 
 // no used now
 void Submap3dOptimizer::subSubmapMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud){
@@ -226,7 +227,8 @@ void Submap3dOptimizer::subSubmapMapCallback(const octomap_server::PosePointClou
   return;
 }
 
-// pose graph solving
+
+// pose graph solving, but no used now
 void Submap3dOptimizer::constraintCallback(const visualization_msgs::MarkerArray::ConstPtr& constraint_list){
   ros::WallTime startTime = ros::WallTime::now();
   ROS_INFO("enter constraintCallback");
@@ -236,29 +238,25 @@ void Submap3dOptimizer::constraintCallback(const visualization_msgs::MarkerArray
   //ceres::examples::SolveOptimizationProblem(&problem);
   //ceres::examples::OutputPoses("poses_optimized.txt", poses);
 
-  //poses->clear();
-  //constraints->clear();
-  publishPoseArray();
-  publishConstriant();
+  //publishPoseArray();
+  //publishConstriant();
   return;
 }
+
 
 // constraint building, sub nodemap poses callback, constraint tag to ConstraintGraph
 void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
   ros::WallTime startTime = ros::WallTime::now();
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("get pose array sized %zu", pose_array->poses.size());
+  unsigned node_id_now = pose_array->poses.size();
   
+  /*
+  // for pose array based constraint visualization
   m_Poses.clear();
   for (int i=0; i<pose_array->poses.size(); ++i)
     m_Poses.push_back(pose_array->poses[i]);
-
-  unsigned node_id_now = pose_array->poses.size();
-  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-
-  //initialize file i/o
-  //std::fstream fout;
-  //fout.open("mit_cartographer.g2o",std::ios::out); //write
-  //if (!fout) return;
+  */
 
   // pose graph add vertex 
   for (unsigned i=0; i<node_id_now; ++i){
@@ -266,8 +264,7 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     InsertVertex(i, nowPose);
   }
 
-  /*
-  // pose graph add constraint: pose and next pose from pose array
+  // pose graph add constraint: each begin_pose(i-1) and end_pose(i) from pose array which maintain by cartographer
   for (unsigned i=0; i<node_id_now; ++i){
     if (i==0) continue; //no edge
     Pose nowPose = pose_array->poses[i];
@@ -293,12 +290,12 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     double *temp_info_matrix = new double[21]{1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,4000,0,0,4000,0,4000};
     InsertConstraint(i-1, i, deltaPose, temp_info_matrix);
   }
-  */
 
+  /*
   // pose graph add constraint: pose and next pose from icp
   for (unsigned i=0; i<node_id_now; ++i){
     if (i==0) continue; //no edge
-    // search now posemap
+    // search now pose and map
     auto nodeNow = NodeGraph.find(i+1);
     if (nodeNow==NodeGraph.end()) continue;
     PCLPointCloud nowMap = *(nodeNow->second.second);
@@ -315,14 +312,15 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     pcl::transformPointCloud(nowMap, nowMap, Trans_now);
 
     //search close neighbor pose
-    //for (unsigned j=i-1; j<node_id_now; ++j){
-    for (unsigned j=i+1; j<node_id_now; ++j){
+    for (unsigned j=i-1; j<node_id_now; ++j){
+      if (j==i|j==i+1) continue;  // duplicate
+
+      // search neighbor pose and map
       auto nodeNeighbor = NodeGraph.find(j+1);
       if (nodeNeighbor==NodeGraph.end()) continue; //no nodemap found
       PCLPointCloud neighborMap = *(nodeNeighbor->second.second);
-
       Pose neighborPose = pose_array->poses[j];
-      if (distance(nowPose,neighborPose)>1.0) continue; //distance threshold = 1m
+      //if (TwoPoseDistance(nowPose,neighborPose)>1.0) continue; //distance threshold = 1m
 
       //pc from neighbor frame to world frame
       Eigen::Quaterniond neighborPose_q(neighborPose.orientation.w, neighborPose.orientation.x, neighborPose.orientation.y, neighborPose.orientation.z);
@@ -372,20 +370,33 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
         deltaPose.orientation.z = deltaPose_q.z();
         deltaPose.orientation.w = deltaPose_q.w();
 
-        double *temp_info_matrix = new double[21]{0.2,0,0,0,0,0,0.2,0,0,0,0,0.2,0,0,0,800,0,0,800,0,800};
-        InsertConstraint_icp(i, j, deltaPose, temp_info_matrix);
+        double *temp_info_matrix = new double[21]{0.01,0,0,0,0,0,0.01,0,0,0,0,0.01,0,0,0,40,0,0,40,0,40};
+        InsertConstraint(i, j, deltaPose, temp_info_matrix);
 
         ROS_INFO("Node %zu neighbor to %zu, add constraint", i+1, j+1);
       }
-
-      ROS_INFO("Node %zu neighbor to %zu", i+1, j+1);
       break; //only try i with i+1
     }
   }
+  */
+
+  std::cout << "Finished pose graph building" << '\n';
   std::cout << "Number of poses: " << poses.size() << '\n';
   std::cout << "Number of constraints: " << constraints.size() << '\n';
 
-  //fout.close();
+  // solving pose graph
+  ceres::Problem problem;
+  ceres::examples::BuildOptimizationProblem(constraints, &poses, &problem);
+  ceres::examples::SolveOptimizationProblem(&problem);
+
+  // pub optimized result
+  publishPoseArray();
+  publishConstriant();
+
+  // clean pose graph
+  poses.clear();
+  constraints.clear();
+  ConstraintCheck.clear();
 }
 
 
@@ -436,6 +447,7 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
 }
 */
 
+
 // sub nodemap callback, insert Nodemap to NodeGraph
 void Submap3dOptimizer::subNodeMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud){
   ROS_INFO("enter subNodeMapCallback");
@@ -451,7 +463,8 @@ void Submap3dOptimizer::subNodeMapCallback(const octomap_server::PosePointCloud2
   return;
 }
 
-// publish stored poses and optimized local submap
+
+// publish optimized poses from pose graph
 void Submap3dOptimizer::publishPoseArray(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   bool publishPoseArray = (m_latchedTopics || m_poseArrayNewPub.getNumSubscribers() > 0);
@@ -481,7 +494,7 @@ void Submap3dOptimizer::publishPoseArray(const ros::Time& rostime){
 }
 
 
-// publish stored poses and optimized local submap
+// publish PointCloud2 for debug
 void Submap3dOptimizer::publishDebugPC(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   bool publishDebugPC = (m_latchedTopics || m_debugPCPub.getNumSubscribers() > 0);
@@ -497,6 +510,7 @@ void Submap3dOptimizer::publishDebugPC(const ros::Time& rostime){
 }
 
 
+// publish constraint MarkerArray for visualization pose graph
 void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   bool publishConstriant = (m_latchedTopics || m_constraintNewPub.getNumSubscribers() > 0);
@@ -527,11 +541,12 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
     points.scale.x = 0.025;
     points.scale.y = 0.025;
 
-    // Create the vertices for the points and lines
+    // go through all constraints and draw a edge from begin pose
     for (auto iter=constraints.begin(); iter!=constraints.end(); ++iter){
-      if (iter->id_begin >= m_Poses.size()) continue;
 
-      //use pose array
+      /*
+      //use pose array edge end-point for debug
+      if (iter->id_begin >= m_Poses.size()) continue;
       geometry_msgs::Point p1;
       p1.x = m_Poses[iter->id_begin].position.x;
       p1.y = m_Poses[iter->id_begin].position.y;
@@ -542,11 +557,11 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
       Eigen::Matrix3d t_be_R = p1_q.toRotationMatrix();
       Eigen::Vector3d t_be_v = iter->t_be.p;
       Eigen::Vector3d p2_v = p1_v + t_be_R*t_be_v;
+      */
 
-      /*
-      //use vertex
+      //use vertex as edge end-point
       auto p1_iter = poses.find(iter->id_begin);
-      if (p1_iter == poses.end()) continue;
+      if (p1_iter == poses.end()) continue;  //begin pose not found
       geometry_msgs::Point p1;
       p1.x = p1_iter->second.p.x();
       p1.y = p1_iter->second.p.y();
@@ -555,7 +570,6 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
       Eigen::Matrix3d t_be_R = p1_iter->second.q.toRotationMatrix();
       Eigen::Vector3d t_be_v = iter->t_be.p;
       Eigen::Vector3d p2_v = p1_iter->second.p + t_be_R*t_be_v;//t_be_R*(p1_iter->second.p) + t_be_v;
-      */
 
       geometry_msgs::Point p2;
       p2.x = p2_v.x();
@@ -574,12 +588,13 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
       line_list.points.push_back(p2);
       line_list.colors.push_back(c);
       line_list.colors.push_back(c);
+
+      // The point indicate the begin point of edge with deep pink
       points.points.push_back(p1);
       c.r = 155.0/255.0;
       c.g = 12.0/255.0;
       c.b = 129.0/255.0;
       points.colors.push_back(c);
-
     }
     constraint_list_new.markers.push_back(line_list);
     constraint_list_new.markers.push_back(points);
@@ -590,7 +605,8 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
 }
 
 
-float Submap3dOptimizer::distance(const Pose &pose_target, const Pose &pose_source){
+// Distance between two pose to determine if they are close (neighbor)
+float Submap3dOptimizer::TwoPoseDistance(const Pose &pose_target, const Pose &pose_source){
   float x_delta = pow(pose_target.position.x - pose_source.position.x, 2);
   float y_delta = pow(pose_target.position.y - pose_source.position.y, 2);
   float z_delta = pow(pose_target.position.z - pose_source.position.z, 2);
@@ -598,6 +614,7 @@ float Submap3dOptimizer::distance(const Pose &pose_target, const Pose &pose_sour
 }
 
 
+// ICP for return joined cloud
 void Submap3dOptimizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
 {
   ros::WallTime startTime = ros::WallTime::now();
@@ -633,6 +650,8 @@ void Submap3dOptimizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, cons
   ROS_INFO("After registration using ICP pointcloud size: %d, time cost: %f(s), converged: %d", output->size(), total_elapsed, icp.hasConverged());
 }
 
+
+// ICP for return transformation matrix 4d
 bool Submap3dOptimizer::PairwiseICP_T(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, Eigen::Matrix4d &output_trans )
 {
   ros::WallTime startTime = ros::WallTime::now();
@@ -643,10 +662,10 @@ bool Submap3dOptimizer::PairwiseICP_T(const PCLPointCloud::Ptr &cloud_target, co
 	tgt = cloud_target;
 	src = cloud_source;
 
-  *m_global_pc_map_temp += *cloud_target;
-  *m_global_pc_map_temp += *cloud_source;
-  publishDebugPC();
-  m_global_pc_map_temp->clear();
+  //*m_global_pc_map_temp += *cloud_target;
+  //*m_global_pc_map_temp += *cloud_source;
+  //publishDebugPC();
+  //m_global_pc_map_temp->clear();
 
 	pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
   // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
@@ -660,20 +679,20 @@ bool Submap3dOptimizer::PairwiseICP_T(const PCLPointCloud::Ptr &cloud_target, co
 	icp.setInputSource (src);
 	icp.setInputTarget (tgt);
 	icp.align (*src_aligned);
-	
+
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+  ROS_INFO("After registration using ICP pointcloud, time cost: %f(s), converged: %d", total_elapsed, icp.hasConverged());
+
   if (icp.hasConverged()){
     output_trans = icp.getFinalTransformation().cast<double>();
     return true;
   }else{
     return false;
   }
-  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  ROS_INFO("After registration using ICP pointcloud, time cost: %f(s), converged: %d", total_elapsed, icp.hasConverged());
 }
 
 
-// Reads a single pose from the input and inserts it into the map. Returns false
-// if there is a duplicate entry.
+// Pose-graph insert a vertex
 bool Submap3dOptimizer::InsertVertex(const int &id, const Pose &vertex){
 
   // Ensure we don't have duplicate poses.
@@ -698,15 +717,13 @@ bool Submap3dOptimizer::InsertVertex(const int &id, const Pose &vertex){
 }
 
 
-// Reads the contraints between two vertices in the pose graph
-// the constrains would be parsing in 2d/3d types.h using SE2/3
+// Pose-graph insert a constraint edge
 void Submap3dOptimizer::InsertConstraint(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix) {
   double constraint_check_id = id_begin + 0.00001*id_end;
   if (ConstraintCheck.find(constraint_check_id) != ConstraintCheck.end()) {
-    //ROS_WARN("Duplicate constraint with ID: %f", constraint_check_id);
+    ROS_WARN("Duplicate constraint with ID: %f", constraint_check_id);
     return;
   }
-
 
   ceres::examples::Constraint3d constraint;
   constraint.id_begin = id_begin;
@@ -733,43 +750,6 @@ void Submap3dOptimizer::InsertConstraint(const int &id_begin, const int &id_end,
   }
   constraints.push_back(constraint);
   ConstraintCheck.insert(constraint_check_id);
-}
-
-
-// Reads the contraints between two vertices in the pose graph
-// the constrains would be parsing in 2d/3d types.h using SE2/3
-void Submap3dOptimizer::InsertConstraint_icp(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix) {
-  double constraint_check_id = id_begin + 0.00001*id_end;
-  if (ConstraintCheck_icp.find(constraint_check_id) != ConstraintCheck_icp.end()) {
-    //ROS_WARN("Duplicate constraint with ID: %f", constraint_check_id);
-    return;
-  }
-
-  ceres::examples::Constraint3d constraint;
-  constraint.id_begin = id_begin;
-  constraint.id_end = id_end;
-
-  constraint.t_be.p.x() = t_be.position.x;
-  constraint.t_be.p.y() = t_be.position.y;
-  constraint.t_be.p.z() = t_be.position.z;
-
-  constraint.t_be.q.w() = t_be.orientation.w;
-  constraint.t_be.q.x() = t_be.orientation.x;
-  constraint.t_be.q.y() = t_be.orientation.y;
-  constraint.t_be.q.z() = t_be.orientation.z;
-
-  int counter = 0;
-  for (int i = 0; i < 6; ++i) {
-    for (int j = i; j < 6; ++j) {
-      constraint.information(i, j) = info_matrix[counter];
-      ++counter;
-      if (i != j) {
-        constraint.information(j, i) = constraint.information(i, j);
-      }
-    }
-  }
-  constraints.push_back(constraint);
-  ConstraintCheck_icp.insert(constraint_check_id);
 }
 
 
