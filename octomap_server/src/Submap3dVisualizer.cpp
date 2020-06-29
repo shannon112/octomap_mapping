@@ -156,9 +156,9 @@ Submap3dVisualizer::Submap3dVisualizer(const ros::NodeHandle private_nh_, const 
   m_map3dPub = m_nh.advertise<sensor_msgs::PointCloud2>("map3d", 1, m_latchedTopics);
 
   // subscriber
-  m_pointCloudSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
-  m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
-  m_poseStampedSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
+  m_pointCloudSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
+  m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
+  m_poseStampedSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
   m_posePointCloudSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "nodemap3d", 5);
 
   // tf listener

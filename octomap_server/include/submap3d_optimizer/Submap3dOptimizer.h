@@ -114,18 +114,21 @@ public:
 
 protected:
 
+  virtual void publishDebugPC(const ros::Time& rostime = ros::Time::now());
   virtual void publishPoseArray(const ros::Time& rostime = ros::Time::now());
   virtual void publishConstriant(const ros::Time& rostime = ros::Time::now());
 
+  virtual bool PairwiseICP_T(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, Eigen::Matrix4d &output_trans );
   virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
   virtual float distance(const Pose &pose_target, const Pose &pose_source);
   virtual bool InsertVertex(const int &id, const Pose &vertex);
   virtual void InsertConstraint(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix);
+  virtual void InsertConstraint_icp(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix);
 
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
 
-  ros::Publisher  m_poseArrayNewPub, m_constraintNewPub;
+  ros::Publisher  m_poseArrayNewPub, m_constraintNewPub, m_debugPCPub;
   ros::Subscriber m_pointCloudSub;
 
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
@@ -194,8 +197,11 @@ protected:
   PCLPointCloud::Ptr m_global_pc_map;
   PCLPointCloud::Ptr m_global_pc_map_temp;
 
+  Pose* pose_array_stored;
+
   std::unordered_map<int, PoseCloud> NodeGraph;
   std::unordered_set<double> ConstraintCheck;
+  std::unordered_set<double> ConstraintCheck_icp;
 
   ceres::examples::MapOfPoses poses;
   ceres::examples::VectorOfConstraints constraints;
