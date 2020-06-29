@@ -315,7 +315,8 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     pcl::transformPointCloud(nowMap, nowMap, Trans_now);
 
     //search close neighbor pose
-    for (unsigned j=i-1; j<node_id_now; ++j){
+    //for (unsigned j=i-1; j<node_id_now; ++j){
+    for (unsigned j=i+1; j<node_id_now; ++j){
       auto nodeNeighbor = NodeGraph.find(j+1);
       if (nodeNeighbor==NodeGraph.end()) continue; //no nodemap found
       PCLPointCloud neighborMap = *(nodeNeighbor->second.second);
@@ -357,22 +358,22 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
 
         Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
         Eigen::Quaterniond newPose_q(newPose.orientation.w, newPose.orientation.x, newPose.orientation.y, newPose.orientation.z);
-        Eigen::Matrix3d newPose_R = newPose_q.toRotationMatrix();
-        Eigen::Vector3d deltaPose_v (nowPose.position.x - newPose.position.x, 
-            nowPose.position.y - newPose.position.y, nowPose.position.z - newPose.position.z);
-        Eigen::Vector3d result_v = newPose_R.transpose()*deltaPose_v;
+        Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
+        Eigen::Vector3d deltaPose_v (newPose.position.x - nowPose.position.x, 
+            newPose.position.y - nowPose.position.y, newPose.position.z - nowPose.position.z);
+        Eigen::Vector3d result_v = nowPose_R.transpose()*deltaPose_v;
         deltaPose.position.x = result_v.x();
         deltaPose.position.y = result_v.y();
         deltaPose.position.z = result_v.z();
 
-        Eigen::Quaterniond deltaPose_q = newPose_q.inverse()*nowPose_q;
+        Eigen::Quaterniond deltaPose_q = nowPose_q.inverse()*newPose_q;
         deltaPose.orientation.x = deltaPose_q.x();
         deltaPose.orientation.y = deltaPose_q.y();
         deltaPose.orientation.z = deltaPose_q.z();
         deltaPose.orientation.w = deltaPose_q.w();
 
         double *temp_info_matrix = new double[21]{0.2,0,0,0,0,0,0.2,0,0,0,0,0.2,0,0,0,800,0,0,800,0,800};
-        InsertConstraint_icp(j, i, deltaPose, temp_info_matrix);
+        InsertConstraint_icp(i, j, deltaPose, temp_info_matrix);
 
         ROS_INFO("Node %zu neighbor to %zu, add constraint", i+1, j+1);
       }
