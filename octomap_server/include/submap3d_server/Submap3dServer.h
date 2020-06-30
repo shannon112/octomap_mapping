@@ -180,6 +180,7 @@ protected:
   unsigned m_CompleteSubmaps;
 
   Pose last_pose;
+  bool m_hasFirstPose;
   //std::vector<Pose> m_Poses;
   PCLPointCloud::Ptr m_local_pc_map;
   PCLPointCloud::Ptr submap3d_old;
