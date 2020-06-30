@@ -112,6 +112,9 @@ Submap3dServer::Submap3dServer(const ros::NodeHandle private_nh_, const ros::Nod
   }
 
   // initialize octomap object & params
+  last_pose = Pose();
+  last_pose.orientation.w = 1;
+
   m_maxTreeDepth = m_treeDepth;
   m_gridmap.info.resolution = m_res;
 
@@ -228,22 +231,26 @@ void Submap3dServer::insertPoseCallback(const geometry_msgs::PoseArray::ConstPtr
 
   if (pose_array->poses.size() > m_SizePoses){    
     m_SizePoses = pose_array->poses.size();
-    last_pose = pose_array->poses[m_SizePoses-1];
     int pc_num_in_node = pc_queue.size();
 
     // accumulate pc to build a 3d map with node ref to global frame
+    ROS_INFO("pc_num_in_node size %d", pc_num_in_node);
     for (int i=0; i<pc_num_in_node; ++i){
       if (i%10!=0){
         pc_queue.pop();
+        pose_queue.pop();
         continue;
       }
-      PCLPointCloud::Ptr icp_pc(new PCLPointCloud);
       if(m_local_pc_map->size()==0) {
         *m_local_pc_map += *(pc_queue.front());
         pc_queue.pop();
+        last_pose = pose_queue.front();
+        pose_queue.pop();
       }else {
+        PCLPointCloud::Ptr icp_pc(new PCLPointCloud);
         PairwiseICP(m_local_pc_map, pc_queue.front(), icp_pc);
         pc_queue.pop();
+        pose_queue.pop();
         m_local_pc_map = icp_pc;
       }
     }
@@ -276,6 +283,9 @@ void Submap3dServer::insertPoseCallback(const geometry_msgs::PoseArray::ConstPtr
       nodemap_queue.push(vx_pc);
       ROS_INFO("Nodemap_queue size %zu", nodemap_queue.size());
     }
+
+    std::cout<< "last_pose stored: " <<last_pose.position.x<< " "<<last_pose.position.y<< " "<<last_pose.position.z<<std::endl;
+    std::cout<< "last_pose from array: " <<pose_array->poses[m_SizePoses-2].position.x<< " "<<pose_array->poses[m_SizePoses-2].position.y<< " "<<pose_array->poses[m_SizePoses-2].position.z<<std::endl;
 
     // transfer to the local ref frame
     PCLPointCloud::Ptr transformed_pc (new PCLPointCloud);
@@ -347,14 +357,31 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
 
   // transform pc from cloud frame to global frame
   tf::StampedTransform sensorToWorldTf;
+  tf::StampedTransform trackingToWorldTf;
   try {
     m_tfListener.lookupTransform(m_worldFrameId, cloud->header.frame_id, cloud->header.stamp, sensorToWorldTf);
+    m_tfListener.lookupTransform(m_worldFrameId, m_trackingFrameId, cloud->header.stamp, trackingToWorldTf);
   } catch(tf::TransformException& ex){
     ROS_ERROR_STREAM( "Transform error of sensor data: " << ex.what() << ", quitting callback");
     return;
   }
+  Eigen::Matrix4f trackingToWorld;
   Eigen::Matrix4f sensorToWorld;
+  pcl_ros::transformAsMatrix(trackingToWorldTf, trackingToWorld);
   pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
+  Eigen::Vector3d trackingToWorld_v = trackingToWorld.block<3,1>(0,3).cast<double>();
+  Eigen::Matrix3d trackingToWorld_M = trackingToWorld.block<3,3>(0,0).cast<double>();
+  Eigen::Quaterniond trackingToWorld_q(trackingToWorld_M);
+  Pose trackingToWorld_P = Pose();
+  trackingToWorld_P.position.x = trackingToWorld_v.x();
+  trackingToWorld_P.position.y = trackingToWorld_v.y();
+  trackingToWorld_P.position.z = trackingToWorld_v.z();
+  trackingToWorld_P.orientation.x = trackingToWorld_q.x();
+  trackingToWorld_P.orientation.y = trackingToWorld_q.y();
+  trackingToWorld_P.orientation.z = trackingToWorld_q.z();
+  trackingToWorld_P.orientation.w = trackingToWorld_q.w();
+  std::cout << "last pose from tf: "<<trackingToWorld_v.x()<<" "<<trackingToWorld_v.y()<<" "<<trackingToWorld_v.z()<<std::endl;
+
   pcl::transformPointCloud(*vx_pc, *vx_pc, sensorToWorld);
   total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("transformation, time cost: %f sec)", total_elapsed);
@@ -371,6 +398,7 @@ void Submap3dServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPt
 
   //push back into queue
   pc_queue.push(st_pc);
+  pose_queue.push(trackingToWorld_P);
   total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("Pointcloud enqueue is done (%zu pts st_pc), time cost: %f sec, queue_size: %zu)", st_pc->size(), total_elapsed, pc_queue.size());
   return;
@@ -397,7 +425,8 @@ void Submap3dServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const P
   if (icp.hasConverged()){
     *output += *tgt;
   }else{
-    output = src;
+    submap3d_old->clear(); //abort old
+    //output = src; //abort new
   }
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("After ICP registration aligned pointcloud size: %d, time cost: %f(s), converged: %d, score: %f", output->size(), total_elapsed, icp.hasConverged(), icp.getFitnessScore());
@@ -407,7 +436,7 @@ void Submap3dServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const P
 void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap){
   ros::WallTime startTime = ros::WallTime::now();
   bool fPublishNodemap3d = (m_latchedTopics || m_nodemap3dPub.getNumSubscribers() > 0);
-  int index_now = (int)(m_SizePoses); // start from 1 = corresponding len of pose array
+  int index_now = (int)(m_SizePoses)-1; // start from 1 = corresponding len of pose array
   
   if (fPublishNodemap3d){
     octomap_server::PosePointCloud2 pcloud;
@@ -424,7 +453,7 @@ void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCl
 void Submap3dServer::publishSubmap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &submapmap){
   ros::WallTime startTime = ros::WallTime::now();
   bool fPublishSubmap3d = (m_latchedTopics || m_submap3dPub.getNumSubscribers() > 0);
-  int index_now = (int)(m_SizeSubmaps); // start from 1 = corresponding len of pose array
+  int index_now = (int)(m_SizeSubmaps)-1; // start from 1 = corresponding len of pose array
 
   /*  
   if (fPublishSubmap3d){

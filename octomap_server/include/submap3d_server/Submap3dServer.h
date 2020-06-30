@@ -186,6 +186,7 @@ protected:
   PCLPointCloud::Ptr submap3d_new;
 
   std::queue<PCLPointCloud::Ptr> pc_queue;
+  std::queue<Pose> pose_queue;
   std::queue<PCLPointCloud::Ptr> nodemap_queue;
   //std::vector< std::queue<PCLPointCloud::Ptr>* > nodemap_queues;
   //std::vector<PCLPointCloud*> m_local_pc_maps;
