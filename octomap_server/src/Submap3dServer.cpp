@@ -446,7 +446,6 @@ void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCl
     pcloud.header.stamp = rostime;
     pcloud.node_id = index_now;
     pcloud.pose = last_pose;
-
     pcl::toROSMsg (*nodemap, pcloud.cloud);
     m_nodemap3dPub.publish(pcloud);
     ROS_INFO("--------Published 3dnode_list %d--------", index_now);

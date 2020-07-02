@@ -46,6 +46,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <std_srvs/Empty.h>
+#include <std_msgs/Empty.h>
 
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
@@ -108,6 +109,7 @@ public:
   bool clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp);
   bool resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
+  virtual void refineCallback(const std_msgs::Empty::ConstPtr& command);
   virtual void insertCloudCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
   virtual void insertSubmap3dposeCallback(const geometry_msgs::PoseArray::ConstPtr& pose);
   virtual void subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
@@ -221,6 +223,7 @@ protected:
   ros::NodeHandle m_nh_private;
   ros::Publisher  m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_projectedMapPub, m_map3dPub;
 
+  ros::Subscriber m_refineSub;
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_pointCloudSub;
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseStampedSub;
@@ -287,6 +290,7 @@ protected:
 
   // pose array
   unsigned m_SizePoses;
+  bool refined;
   Pose last_pose;
   std::vector<Pose> m_Poses;
   std::vector<PCLPointCloud::Ptr> m_local_pc_maps;
@@ -299,6 +303,7 @@ protected:
   //std::unordered_map<int, PCLPointCloud::Ptr> NodeGraph;
   std::unordered_set<int> Integrated;
   std::vector<Global> GlobalGraph;
+  std::vector<PCLPointCloud::Ptr> globalmap;
 
   ros::WallTime previousTime;
 };

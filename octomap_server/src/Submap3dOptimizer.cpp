@@ -406,9 +406,9 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
   unsigned node_id_now = pose_array->poses.size();
   
   // for pose array based constraint visualization
-  m_Poses.clear();
-  for (int i=0; i<pose_array->poses.size(); ++i)
-    m_Poses.push_back(pose_array->poses[i]);
+  //m_Poses.clear();
+  //for (int i=0; i<pose_array->poses.size(); ++i)
+  //  m_Poses.push_back(pose_array->poses[i]);
 
   // pose graph add vertex 
   for (unsigned i=0; i<node_id_now; ++i){

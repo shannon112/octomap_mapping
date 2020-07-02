@@ -23,6 +23,7 @@ Submap3dVisualizer::Submap3dVisualizer(const ros::NodeHandle private_nh_, const 
   m_tfPoseStampedSub(NULL),
   m_tfPosePointCloudSub(NULL),
 
+  refined(false),
   m_SizePoses(0),
   m_global_pc_map_temp(new PCLPointCloud),
   m_global_pc_map(new PCLPointCloud),
@@ -158,6 +159,8 @@ Submap3dVisualizer::Submap3dVisualizer(const ros::NodeHandle private_nh_, const 
   m_map3dPub = m_nh.advertise<sensor_msgs::PointCloud2>("map3d", 1, m_latchedTopics);
 
   // subscriber
+  m_refineSub = m_nh.subscribe<std_msgs::Empty>("to_refine_map", 5, &Submap3dVisualizer::refineCallback, this);
+
   m_pointCloudSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
   m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
   m_poseStampedSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
@@ -220,21 +223,21 @@ Submap3dVisualizer::~Submap3dVisualizer(){
 
 }
 
-// pointcloud map building
-void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
+void Submap3dVisualizer::refineCallback(const std_msgs::Empty::ConstPtr& command){
+  refined = true;
+  std::cout<<"start refining map"<<std::endl;
+
   ros::WallTime startTime = ros::WallTime::now();
-  ROS_INFO("pointcloud get pose array sized %zu", pose_array->poses.size());
-  unsigned node_id_now = pose_array->poses.size();
-  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+  ROS_INFO("pointcloud get pose vector sized %zu", m_Poses.size());
+  unsigned node_id_now = m_Poses.size();
 
   //update global map, tuning with live pose_array from cartographer
   int counter = 0;
-  int base_map_id = 0;
   for (unsigned i=0; i<node_id_now; ++i){
     auto nodeExist = NodeGraph.find(i+1);
     if (nodeExist!=NodeGraph.end()){
       PCLPointCloud temp = *(nodeExist->second.second);
-      Pose nowPose = pose_array->poses[i];
+      Pose nowPose = m_Poses[i];
 
       Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
       Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
@@ -246,15 +249,15 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
       pcl::transformPointCloud(temp, temp, Trans);
 
       //centroid of global pc
-      //Eigen::Vector4f centroid; 
-      //pcl::compute3DCentroid(temp,centroid);
-      //GlobalGraph.push_back(Global(centroid, temp));
+      Eigen::Vector4f centroid; 
+      pcl::compute3DCentroid(temp,centroid);
+      GlobalGraph.push_back(Global(centroid, temp));
+    }//if node exist
+  }//for
 
-      *m_global_pc_map += temp;
-    }
-  }
+  m_local_pc_map->clear();
+  m_global_pc_map->clear();
 
-  /*
   //search neighbor and icp merge
   for (auto iter=GlobalGraph.begin(); iter!=GlobalGraph.end(); ++iter){
     // find one which is not integrated yet
@@ -266,18 +269,18 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
     *m_local_pc_map+= *pcNow;
 
     // iteratively find neighbor
-    int lastmapId = iter - GlobalGraph.begin();
+    //int lastmapId = iter - GlobalGraph.begin();
     for (auto iterN=GlobalGraph.begin(); iterN!=GlobalGraph.end(); ++iterN){
       if (Integrated.find(iterN-GlobalGraph.begin())!=Integrated.end() ) continue; //that map is already integrated
 
       Eigen::Vector4f centroidNeighbor = iterN->first;
       // see if it is really close enough
       if (TwoVectorDistance(centroidNeighbor, centroidNow) < 1){
-        std::cout<<"@find "<< iter-GlobalGraph.begin() <<"neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
+        std::cout<<"@find ("<< iter-GlobalGraph.begin() <<"/"<<node_id_now <<") neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
 
         // see if that is too close
-        if (abs(iterN-GlobalGraph.begin() - lastmapId)<5) continue;
-        lastmapId = iterN-GlobalGraph.begin();
+        //if (abs(iterN-GlobalGraph.begin() - lastmapId)<5) continue;
+        //lastmapId = iterN-GlobalGraph.begin();
 
         PCLPointCloud::Ptr pcNeighbor = (iterN->second).makeShared();
 
@@ -305,17 +308,62 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
     *m_global_pc_map += *m_local_pc_map;
     m_local_pc_map->clear();
   }
-  */
 
+  //publish pointcloud globalmap
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+  if ((ros::WallTime::now()-previousTime).toSec() > 2){
+    previousTime = ros::WallTime::now();
+    publishPCmap3d();
+    m_global_pc_map->clear();
+    GlobalGraph.clear();
+    Integrated.clear();
+  }
+  ROS_INFO("Cleared pointcloud map");
+}
+
+
+// pointcloud map building
+void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
+  ros::WallTime startTime = ros::WallTime::now();
+  ROS_INFO("pointcloud get pose array sized %zu", pose_array->poses.size());
+  unsigned node_id_now = pose_array->poses.size();
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+
+  // for pose array based constraint visualization
+  m_Poses.clear();
+  for (int i=0; i<pose_array->poses.size(); ++i)
+    m_Poses.push_back(pose_array->poses[i]);
+
+  if (refined) return;
+
+  //update global map, tuning with live pose_array from cartographer
+  int counter = 0;
+  int base_map_id = 0;
+  for (unsigned i=0; i<node_id_now; ++i){
+    auto nodeExist = NodeGraph.find(i+1);
+    if (nodeExist!=NodeGraph.end()){
+      PCLPointCloud temp = *(nodeExist->second.second);
+      Pose nowPose = pose_array->poses[i];
+
+      Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
+      Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
+      Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
+      Eigen::Matrix4d Trans; 
+      Trans.setIdentity();
+      Trans.block<3,3>(0,0) = nowPose_R;
+      Trans.block<3,1>(0,3) = nowPose_v;
+      pcl::transformPointCloud(temp, temp, Trans);
+
+      *m_global_pc_map += temp;
+    }//if node exist
+  }//for
 
   //publish pointcloud globalmap
   if ((ros::WallTime::now()-previousTime).toSec() > 2){
     previousTime = ros::WallTime::now();
     publishPCmap3d(pose_array->header.stamp);
+    m_global_pc_map->clear();
   }
-  m_global_pc_map->clear();
-  GlobalGraph.clear();
-  Integrated.clear();
   ROS_INFO("Cleared pointcloud map");
 }
 
@@ -383,70 +431,96 @@ void Submap3dVisualizer::insertCloudCallback(const geometry_msgs::PoseArray::Con
   return;
 }
 
-// temp map building
+// temp map building, maybe good to work as service
 void Submap3dVisualizer::subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
-  ros::WallTime startTime = ros::WallTime::now();
-  ROS_INFO("pointcloud get pose array sized %zu", pose_array->poses.size());
-  unsigned node_id_now = pose_array->poses.size();
-  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
 
-  //update global map, tuning with live pose_array from cartographer
-  int counter = 0;
-  int base_map_id = 0;
-  Pose base_map_pose;
-  for (unsigned i=0; i<node_id_now; ++i){
-    auto nodeExist = NodeGraph.find(i+1);
-    if (nodeExist!=NodeGraph.end()){
-      PCLPointCloud temp = *(nodeExist->second.second);
-      Pose nowPose = pose_array->poses[i];
+  /*
+  //search neighbor and icp merge
+  for (auto iter=GlobalGraph.begin(); iter!=GlobalGraph.end(); ++iter){
+    // find one which is not integrated yet
+    if (Integrated.find(iter-GlobalGraph.begin())!=Integrated.end() ) continue; //that map is already integrated
+    Integrated.insert(iter-GlobalGraph.begin());
 
-      Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
-      Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
-      Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
-      Eigen::Matrix4d Trans; 
-      Trans.setIdentity();
-      Trans.block<3,3>(0,0) = nowPose_R;
-      Trans.block<3,1>(0,3) = nowPose_v;
-      pcl::transformPointCloud(temp, temp, Trans);
+    Eigen::Vector4f centroidNow = iter->first;
+    PCLPointCloud::Ptr pcNow = (iter->second).makeShared();
+    *m_local_pc_map+= *pcNow;
 
-      //insert nodemap to pointcloud map
-      if (m_local_pc_map->size()==0) {
-        *m_local_pc_map+=temp;
-        std::cout<<"@directly  add "<<i<<std::endl;
-        base_map_id = i;
-        base_map_pose = nodeExist->second.first;
-      }
-      else{
+    // iteratively find neighbor
+    int lastmapId = iter - GlobalGraph.begin();
+    for (auto iterN=GlobalGraph.begin(); iterN!=GlobalGraph.end(); ++iterN){
+      if (Integrated.find(iterN-GlobalGraph.begin())!=Integrated.end() ) continue; //that map is already integrated
+
+      Eigen::Vector4f centroidNeighbor = iterN->first;
+      // see if it is really close enough
+      if (TwoVectorDistance(centroidNeighbor, centroidNow) < 1){
+        std::cout<<"@find "<< iter-GlobalGraph.begin() <<"neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
+
+        // see if that is too close
+        if (abs(iterN-GlobalGraph.begin() - lastmapId)<5) continue;
+        lastmapId = iterN-GlobalGraph.begin();
+
+        PCLPointCloud::Ptr pcNeighbor = (iterN->second).makeShared();
+
         PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
-        if (PairwiseICP(m_local_pc_map, temp.makeShared(), m_local_new)) {
+        if (PairwiseICP(m_local_pc_map, pcNeighbor, m_local_new)==true) {
           m_local_pc_map = m_local_new;
-          std::cout<<"@icp  add "<<i<<std::endl;
-          NodeGraph.erase(base_map_id);
-          NodeGraph.erase(i);
+          std::cout<<"@integrated "<< iter-GlobalGraph.begin() <<" and its neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
+          Integrated.insert(iterN-GlobalGraph.begin());
+        }
+        else  {
+          std::cout<<"@abort "<< iterN-GlobalGraph.begin()<<std::endl;
+        }
 
-          // voxel filter
-          PCLPointCloud vx_pc;
-          pcl::VoxelGrid<PCLPoint> voxel_filter;
-          voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
-          voxel_filter.setInputCloud(m_local_pc_map);
-          voxel_filter.filter(vx_pc);
+        // voxel filter
+        PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
+        pcl::VoxelGrid<PCLPoint> voxel_filter;
+        voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
+        voxel_filter.setInputCloud(m_local_pc_map);
+        voxel_filter.filter(*vx_pc);
+        m_local_pc_map = vx_pc;
 
-          Eigen::Quaterniond base_map_pose_q(base_map_pose.orientation.w, base_map_pose.orientation.x, base_map_pose.orientation.y, base_map_pose.orientation.z);
-          Eigen::Vector3d base_map_pose_v(base_map_pose.position.x, base_map_pose.position.y, base_map_pose.position.z);
-          Eigen::Matrix3d base_map_pose_R = base_map_pose_q.toRotationMatrix();
-          Eigen::Matrix4d Trans_inverse; 
-          Trans_inverse.setIdentity();
-          Trans_inverse.block<3,3>(0,0) = base_map_pose_R.transpose();
-          Trans_inverse.block<3,1>(0,3) = -base_map_pose_R.transpose()*base_map_pose_v;
-
-          pcl::transformPointCloud(vx_pc, vx_pc, Trans_inverse);
-
-          NodeGraph.insert(Node(base_map_id, PoseCloud(base_map_pose,vx_pc.makeShared())));
-        } else std::cout<<"@icp drop "<<i<<std::endl;
-        m_local_pc_map->clear();
+        //*m_local_pc_map += iterN->second; //debug
       }
     }
+    *m_global_pc_map += *m_local_pc_map;
+    m_local_pc_map->clear();
   }
+  */
+
+
+
+  /*
+  //insert nodemap to pointcloud map
+  //first map
+  if (m_local_pc_map->size()==0) {
+    *m_local_pc_map+=temp;
+    std::cout<<"@directly  add "<<i<<std::endl;
+  }
+  //second map
+  else{
+    PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
+    // successfully merge
+    if (PairwiseICP(m_local_pc_map, temp.makeShared(), m_local_new)) {
+      m_local_pc_map = m_local_new;
+      std::cout<<"@icp  add "<<i<<std::endl;
+
+      // voxel filter
+      PCLPointCloud vx_pc;
+      pcl::VoxelGrid<PCLPoint> voxel_filter;
+      voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
+      voxel_filter.setInputCloud(m_local_pc_map);
+      voxel_filter.filter(vx_pc);
+      
+      globalmap.push_back(vx_pc.makeShared());
+
+    } 
+    // fail to merge
+    else {
+      std::cout<<"@icp drop "<<i<<std::endl;
+    }
+    m_local_pc_map->clear();
+  }
+  */
 
 }
 
