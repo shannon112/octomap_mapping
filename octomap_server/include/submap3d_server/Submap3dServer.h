@@ -105,7 +105,7 @@ public:
 
 protected:
   virtual void publishSubmap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap);
-  virtual void publishNodemap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap);
+  virtual void publishNodemap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap, const Pose &last_pose);
   virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
 
   /**

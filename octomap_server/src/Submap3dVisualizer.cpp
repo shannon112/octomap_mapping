@@ -229,6 +229,7 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
 
   //update global map, tuning with live pose_array from cartographer
   int counter = 0;
+  int base_map_id = 0;
   for (unsigned i=0; i<node_id_now; ++i){
     auto nodeExist = NodeGraph.find(i+1);
     if (nodeExist!=NodeGraph.end()){
@@ -249,20 +250,6 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
       //pcl::compute3DCentroid(temp,centroid);
       //GlobalGraph.push_back(Global(centroid, temp));
 
-      //insert nodemap to pointcloud map
-      /*
-      if (counter%2==0) *m_local_pc_map+=temp;
-      else{
-        PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
-        if (PairwiseICP(m_local_pc_map, temp.makeShared(), m_local_new)) *m_global_pc_map += *m_local_new;
-        else {
-          *m_global_pc_map += temp;
-          *m_global_pc_map += *m_local_pc_map;
-        }
-        m_local_pc_map->clear();
-      }
-      ++counter;
-      */
       *m_global_pc_map += temp;
     }
   }
@@ -398,44 +385,69 @@ void Submap3dVisualizer::insertCloudCallback(const geometry_msgs::PoseArray::Con
 
 // temp map building
 void Submap3dVisualizer::subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
-/*
   ros::WallTime startTime = ros::WallTime::now();
-  ROS_INFO("Get pose array sized %zu", pose_array->poses.size());
+  ROS_INFO("pointcloud get pose array sized %zu", pose_array->poses.size());
   unsigned node_id_now = pose_array->poses.size();
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
 
   //update global map, tuning with live pose_array from cartographer
-  auto nodeExist = NodeGraph.find(node_id_now);
-  if (nodeExist!=NodeGraph.end()){
-    PCLPointCloud temp = *(nodeExist->second.second);
-    Pose nowPose = pose_array->poses[node_id_now-1];
-    Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
-    Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
-    Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
-    Eigen::Matrix4d Trans; 
-    Trans.setIdentity();
-    Trans.block<3,3>(0,0) = nowPose_R;
-    Trans.block<3,1>(0,3) = nowPose_v;
-    pcl::transformPointCloud(temp, temp, Trans);
+  int counter = 0;
+  int base_map_id = 0;
+  Pose base_map_pose;
+  for (unsigned i=0; i<node_id_now; ++i){
+    auto nodeExist = NodeGraph.find(i+1);
+    if (nodeExist!=NodeGraph.end()){
+      PCLPointCloud temp = *(nodeExist->second.second);
+      Pose nowPose = pose_array->poses[i];
 
-    //insert nodemap to pointcloud map
-    *m_global_pc_map_temp += temp;
+      Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
+      Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
+      Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
+      Eigen::Matrix4d Trans; 
+      Trans.setIdentity();
+      Trans.block<3,3>(0,0) = nowPose_R;
+      Trans.block<3,1>(0,3) = nowPose_v;
+      pcl::transformPointCloud(temp, temp, Trans);
 
-    //insert submap to octomap
-    tf::Point sensorOrigin(nowPose.position.x, nowPose.position.y, nowPose.position.z);
-    insertScan(sensorOrigin, temp);
-    total_elapsed = (ros::WallTime::now() - startTime).toSec();
-    ROS_INFO("Octomap insertion is done, %f sec)", total_elapsed);
+      //insert nodemap to pointcloud map
+      if (m_local_pc_map->size()==0) {
+        *m_local_pc_map+=temp;
+        std::cout<<"@directly  add "<<i<<std::endl;
+        base_map_id = i;
+        base_map_pose = nodeExist->second.first;
+      }
+      else{
+        PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
+        if (PairwiseICP(m_local_pc_map, temp.makeShared(), m_local_new)) {
+          m_local_pc_map = m_local_new;
+          std::cout<<"@icp  add "<<i<<std::endl;
+          NodeGraph.erase(base_map_id);
+          NodeGraph.erase(i);
+
+          // voxel filter
+          PCLPointCloud vx_pc;
+          pcl::VoxelGrid<PCLPoint> voxel_filter;
+          voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
+          voxel_filter.setInputCloud(m_local_pc_map);
+          voxel_filter.filter(vx_pc);
+
+          Eigen::Quaterniond base_map_pose_q(base_map_pose.orientation.w, base_map_pose.orientation.x, base_map_pose.orientation.y, base_map_pose.orientation.z);
+          Eigen::Vector3d base_map_pose_v(base_map_pose.position.x, base_map_pose.position.y, base_map_pose.position.z);
+          Eigen::Matrix3d base_map_pose_R = base_map_pose_q.toRotationMatrix();
+          Eigen::Matrix4d Trans_inverse; 
+          Trans_inverse.setIdentity();
+          Trans_inverse.block<3,3>(0,0) = base_map_pose_R.transpose();
+          Trans_inverse.block<3,1>(0,3) = -base_map_pose_R.transpose()*base_map_pose_v;
+
+          pcl::transformPointCloud(vx_pc, vx_pc, Trans_inverse);
+
+          NodeGraph.insert(Node(base_map_id, PoseCloud(base_map_pose,vx_pc.makeShared())));
+        } else std::cout<<"@icp drop "<<i<<std::endl;
+        m_local_pc_map->clear();
+      }
+    }
   }
 
-  //publish octomap/pointcloud globalmap
-  if ((ros::WallTime::now()-previousTime).toSec() > 1){
-    previousTime = ros::WallTime::now();
-    publishPCmap3d(pose_array->header.stamp);
-    publishOCTmap3d();
-  }
-  return;
-*/
 }
 
 bool Submap3dVisualizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
@@ -447,11 +459,11 @@ bool Submap3dVisualizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, con
 	tgt = cloud_target;
 	src = cloud_source;
  
-	pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
-	icp.setMaxCorrespondenceDistance(1.5); //ignore the point out of distance(m)
-	icp.setTransformationEpsilon(1e-6); //converge criterion
-	icp.setEuclideanFitnessEpsilon(1); //diverge threshold
-	icp.setMaximumIterations (20);
+	pcl::GeneralizedIterativeClosestPoint<PCLPoint, PCLPoint> icp;
+	//icp.setMaxCorrespondenceDistance(1.5); //ignore the point out of distance(m)
+	//icp.setTransformationEpsilon(1e-6); //converge criterion
+	//icp.setEuclideanFitnessEpsilon(1); //diverge threshold
+	icp.setMaximumIterations (5);
 	icp.setInputSource (src);
 	icp.setInputTarget (tgt);
 	icp.align (*src);
@@ -476,8 +488,9 @@ void Submap3dVisualizer::subNodeMapCallback(const octomap_server::PosePointCloud
     ROS_WARN("NodeMap ignore size=%zu ", pc->size());
     return;
   }
+  //NodeGraph.insert(Node(pose_pointcloud->node_id, pc));
   NodeGraph.insert(Node(pose_pointcloud->node_id, PoseCloud(pose_pointcloud->pose, pc)));
-  ROS_INFO("Get node %d, insert to graph size= %d", pose_pointcloud->node_id, NodeGraph.size());
+  ROS_INFO("@Get node %d, insert to graph size= %d", pose_pointcloud->node_id, NodeGraph.size());
   return;
 }
 

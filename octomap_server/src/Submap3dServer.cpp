@@ -319,7 +319,7 @@ void Submap3dServer::insertPoseCallback(const geometry_msgs::PoseArray::ConstPtr
     }
 
     // publish 3dnode_list (submap pair with pose)
-    publishNodemap3d(latest_pa_stamp, transformed_pc);
+    publishNodemap3d(latest_pa_stamp, transformed_pc, last_pose);
 
     // update to new cycle
     m_local_pc_map->clear();
@@ -434,7 +434,7 @@ void Submap3dServer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const P
 }
 
 // 3dnode_list pub
-void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap){
+void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCloud::Ptr &nodemap, const Pose &last_pose){
   ros::WallTime startTime = ros::WallTime::now();
   bool fPublishNodemap3d = (m_latchedTopics || m_nodemap3dPub.getNumSubscribers() > 0);
   int index_now = (int)(m_SizePoses)-1; // start from 1 = corresponding len of pose array
@@ -445,6 +445,7 @@ void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCl
     pcloud.header.frame_id = m_worldFrameId;//m_worldFrameId;//
     pcloud.header.stamp = rostime;
     pcloud.node_id = index_now;
+    pcloud.pose = last_pose;
 
     pcl::toROSMsg (*nodemap, pcloud.cloud);
     m_nodemap3dPub.publish(pcloud);

@@ -58,6 +58,7 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/registration/icp.h>
+#include <pcl/registration/gicp.h>
 #include <pcl/filters/voxel_grid.h>
 
 #include <tf/transform_listener.h>
@@ -97,6 +98,7 @@ public:
   typedef geometry_msgs::Pose Pose;
   typedef std::pair<Pose,PCLPointCloud::Ptr> PoseCloud;
   typedef std::pair<int,PoseCloud> Node;
+  //typedef std::pair<int,PCLPointCloud::Ptr> Node;
   typedef std::pair<Eigen::Vector4f, PCLPointCloud> Global;
 
   Submap3dVisualizer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
@@ -294,6 +296,7 @@ protected:
   PCLPointCloud::Ptr m_global_pc_map_temp;
 
   std::unordered_map<int, PoseCloud> NodeGraph;
+  //std::unordered_map<int, PCLPointCloud::Ptr> NodeGraph;
   std::unordered_set<int> Integrated;
   std::vector<Global> GlobalGraph;
 
