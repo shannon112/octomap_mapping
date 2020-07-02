@@ -27,6 +27,7 @@ Submap3dOptimizer::Submap3dOptimizer(const ros::NodeHandle private_nh_, const ro
 
   m_global_pc_map_temp(new PCLPointCloud),
   m_global_pc_map(new PCLPointCloud),
+  isSolved(false),
   m_maxRange(-1.0),
   m_worldFrameId("/map"), m_baseFrameId("base_footprint"),
   m_useHeightMap(true),
@@ -152,17 +153,20 @@ Submap3dOptimizer::Submap3dOptimizer(const ros::NodeHandle private_nh_, const ro
 
   // subscriber
   m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
-  m_poseStampedSub = new message_filters::Subscriber<cartographer_ros_msgs::SubmapList> (m_nh, "submap_list", 5);
-  m_submapSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "submap3d", 5);
+  m_poseEdgeSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
+  //m_poseStampedSub = new message_filters::Subscriber<cartographer_ros_msgs::SubmapList> (m_nh, "submap_list", 5);
+  //m_submapSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "submap3d", 5);
   m_nodemapSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "nodemap3d", 5);
 
   // tf listener
   m_tfPoseArraySub = new tf::MessageFilter<geometry_msgs::PoseArray> (*m_poseArraySub, m_tfListener, m_worldFrameId, 5);
   m_tfPoseArraySub->registerCallback(boost::bind(&Submap3dOptimizer::subNodePoseCallback, this, _1));
-  m_tfPoseStampedSub = new tf::MessageFilter<cartographer_ros_msgs::SubmapList> (*m_poseStampedSub, m_tfListener, m_worldFrameId, 5);
-  m_tfPoseStampedSub->registerCallback(boost::bind(&Submap3dOptimizer::subSubmapPoseCallback, this, _1));
-  m_tfSubmapSub = new tf::MessageFilter<octomap_server::PosePointCloud2> (*m_submapSub, m_tfListener, m_worldFrameId, 5);
-  m_tfSubmapSub->registerCallback(boost::bind(&Submap3dOptimizer::subSubmapMapCallback, this, _1));
+  m_tfPoseEdgeSub = new tf::MessageFilter<geometry_msgs::PoseArray> (*m_poseEdgeSub, m_tfListener, m_worldFrameId, 5);
+  m_tfPoseEdgeSub->registerCallback(boost::bind(&Submap3dOptimizer::subNodeEdgeCallback, this, _1));
+  //m_tfPoseStampedSub = new tf::MessageFilter<cartographer_ros_msgs::SubmapList> (*m_poseStampedSub, m_tfListener, m_worldFrameId, 5);
+  //m_tfPoseStampedSub->registerCallback(boost::bind(&Submap3dOptimizer::subSubmapPoseCallback, this, _1));
+  //m_tfSubmapSub = new tf::MessageFilter<octomap_server::PosePointCloud2> (*m_submapSub, m_tfListener, m_worldFrameId, 5);
+  //m_tfSubmapSub->registerCallback(boost::bind(&Submap3dOptimizer::subSubmapMapCallback, this, _1));
   m_tfNodemapSub = new tf::MessageFilter<octomap_server::PosePointCloud2> (*m_nodemapSub, m_tfListener, m_worldFrameId, 5);
   m_tfNodemapSub->registerCallback(boost::bind(&Submap3dOptimizer::subNodeMapCallback, this, _1));
 
@@ -170,40 +174,44 @@ Submap3dOptimizer::Submap3dOptimizer(const ros::NodeHandle private_nh_, const ro
 
 Submap3dOptimizer::~Submap3dOptimizer(){
   // tf subscriber
-  if (m_poseArraySub){
-    delete m_poseArraySub;
-    m_poseArraySub = NULL;
-  }
   if (m_tfPoseArraySub){
     delete m_tfPoseArraySub;
     m_tfPoseArraySub = NULL;
   }
-  if (m_tfPoseStampedSub){
-    delete m_tfPoseStampedSub;
-    m_tfPoseStampedSub = NULL;
+  if (m_tfPoseEdgeSub){
+    delete m_tfPoseArraySub;
+    m_tfPoseEdgeSub = NULL;
   }
+  //if (m_tfPoseStampedSub){
+  //  delete m_tfPoseStampedSub;
+  //  m_tfPoseStampedSub = NULL;
+  //}
   if (m_tfNodemapSub){
     delete m_tfNodemapSub;
     m_tfNodemapSub = NULL;
   }
-  if (m_tfSubmapSub){
-    delete m_tfSubmapSub;
-    m_tfSubmapSub = NULL;
-  }
+  //if (m_tfSubmapSub){
+  //  delete m_tfSubmapSub;
+  //  m_tfSubmapSub = NULL;
+  //}
   
   // subscriber
   if (m_poseArraySub){
     delete m_poseArraySub;
     m_poseArraySub = NULL;
   }
-  if (m_poseStampedSub){
-    delete m_poseStampedSub;
-    m_poseStampedSub = NULL;
+  if (m_poseEdgeSub){
+    delete m_poseEdgeSub;
+    m_poseEdgeSub = NULL;
   }
-  if (m_submapSub){
-    delete m_submapSub;
-    m_submapSub = NULL;
-  }
+  //if (m_poseStampedSub){
+  //  delete m_poseStampedSub;
+  //  m_poseStampedSub = NULL;
+  //}
+  //if (m_submapSub){
+  //  delete m_submapSub;
+  //  m_submapSub = NULL;
+  //}
   if (m_nodemapSub){
     delete m_nodemapSub;
     m_nodemapSub = NULL;
@@ -233,15 +241,161 @@ void Submap3dOptimizer::constraintCallback(const visualization_msgs::MarkerArray
   ros::WallTime startTime = ros::WallTime::now();
   ROS_INFO("enter constraintCallback");
 
-  //ceres::Problem problem;
-  //ceres::examples::BuildOptimizationProblem(constraints, &poses, &problem);
-  //ceres::examples::SolveOptimizationProblem(&problem);
-  //ceres::examples::OutputPoses("poses_optimized.txt", poses);
+  /*
+  if (constraints.size()>node_id_now-1){
+    ceres::Problem problem;
+    ceres::examples::BuildOptimizationProblem(constraints, &poses, &problem);
+    ceres::examples::SolveOptimizationProblem(&problem);
+    //ceres::examples::OutputPoses("poses_optimized.txt", poses);
 
-  //publishPoseArray();
-  //publishConstriant();
+    publishPoseArray();
+    publishConstriant();
+  }
+  */
   return;
 }
+
+
+// constraint building, sub nodemap poses callback, constraint tag to ConstraintGraph
+void Submap3dOptimizer::subNodeEdgeCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
+  ros::WallTime startTime = ros::WallTime::now();
+  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
+  ROS_INFO("get pose array sized %zu", pose_array->poses.size());
+  unsigned node_id_now = pose_array->poses.size();
+
+  // pose graph add constraint: pose and next pose from icp
+  for (unsigned i=0; i<node_id_now; i=i+2){
+    if (i==0) continue; //no edge
+    // search now pose and map
+    auto nodeNow = NodeGraph.find(i+1);
+    if (nodeNow==NodeGraph.end()) continue;
+    PCLPointCloud nowMap = *(nodeNow->second.second);
+    Pose nowPose = pose_array->poses[i];
+
+    //pc from now frame to world frame
+    Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
+    Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
+    Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
+    Eigen::Matrix4d Trans_now; 
+    Trans_now.setIdentity();
+    Trans_now.block<3,3>(0,0) = nowPose_R;
+    Trans_now.block<3,1>(0,3) = nowPose_v;
+    pcl::transformPointCloud(nowMap, nowMap, Trans_now);
+    //centroid of global pc
+    Eigen::Vector4f centroid_now; 
+    pcl::compute3DCentroid(nowMap,centroid_now);
+
+    //search close neighbor pose
+    int counter = 0;
+    for (unsigned j=i-1; j<node_id_now; ++j){
+      // duplicate with cartographer
+      if (j==i|j==i+1) continue;
+
+      // duplicate with old built edge
+      double constraint_check_id = i+0.00001*j; //id_begin + 0.00001*id_end;
+      if (ConstraintCheck.find(constraint_check_id) != ConstraintCheck.end()) {
+        ROS_WARN("Duplicate constraint with ID: %f", constraint_check_id);
+        continue;
+      }
+
+      // search neighbor pose and map
+      auto nodeNeighbor = NodeGraph.find(j+1);
+      if (nodeNeighbor==NodeGraph.end()) continue; //no nodemap found
+      PCLPointCloud neighborMap = *(nodeNeighbor->second.second);
+      Pose neighborPose = pose_array->poses[j];
+      //if (TwoPoseDistance(nowPose,neighborPose)>1.0) continue; //distance threshold = 1m
+
+      //pc from neighbor frame to world frame
+      Eigen::Quaterniond neighborPose_q(neighborPose.orientation.w, neighborPose.orientation.x, neighborPose.orientation.y, neighborPose.orientation.z);
+      Eigen::Vector3d neighborPose_v(neighborPose.position.x, neighborPose.position.y, neighborPose.position.z);
+      Eigen::Matrix3d neighborPose_R = neighborPose_q.toRotationMatrix();
+      Eigen::Matrix4d Trans_neighbor; 
+      Trans_neighbor.setIdentity();
+      Trans_neighbor.block<3,3>(0,0) = neighborPose_R;
+      Trans_neighbor.block<3,1>(0,3) = neighborPose_v;
+      pcl::transformPointCloud(neighborMap, neighborMap, Trans_neighbor);
+      //centroid of global pc
+      Eigen::Vector4f centroid_neighbor; 
+      pcl::compute3DCentroid(neighborMap,centroid_neighbor);
+
+      if (TwoVectorDistance4f(centroid_now,centroid_neighbor)> 0.5) continue; //distance threshold = 1m
+      ++counter;
+      if (counter%5!=0) continue;
+
+      // find transforamtion from  icp
+      Eigen::Matrix4d transformation;
+      if (PairwiseICP_T(nowMap.makeShared(), neighborMap.makeShared(), transformation)){
+        Eigen::Matrix4d neighborPose_new = transformation*Trans_neighbor;
+        Eigen::Matrix3d neighborPose_new_R = neighborPose_new.block<3,3>(0,0);
+        Eigen::Vector3d neighborPose_new_v = neighborPose_new.block<3,1>(0,3);
+        neighborPose_new_v.z() = neighborPose_v.z();
+        Eigen::Vector3d neighborPose_new_e = neighborPose_new_R.eulerAngles(0, 1, 2); 
+        Eigen::Vector3d neighborPose_e = neighborPose_R.eulerAngles(0, 1, 2); 
+        Eigen::Quaterniond neighborPose_new_q (neighborPose_new_R);
+
+        ROS_INFO("p2 before:  %f, %f, %f. %f, %f, %f.", neighborPose_v.x(), neighborPose_v.y(),neighborPose_v.z(), neighborPose_e.x(),  neighborPose_e.y(),  neighborPose_e.z());
+        ROS_INFO("p2 after:  %f, %f, %f. %f, %f, %f.", neighborPose_new_v.x(), neighborPose_new_v.y(),neighborPose_new_v.z(), neighborPose_new_e.x(), neighborPose_new_e.y(), neighborPose_new_e.z());
+
+        //bad matching
+        if (TwoVectorDistance3d(neighborPose_v, neighborPose_new_v)==false){
+          ConstraintCheck.insert(constraint_check_id);
+          constraint_check_id = j+0.00001*i;
+          ConstraintCheck.insert(constraint_check_id);
+          continue;
+        }
+
+        Pose newPose = Pose();
+        newPose.position.x = neighborPose_new_v.x();
+        newPose.position.y = neighborPose_new_v.y();
+        newPose.position.z = neighborPose_new_v.z();
+        newPose.orientation.x = neighborPose_new_q.x();
+        newPose.orientation.y = neighborPose_new_q.y();
+        newPose.orientation.z = neighborPose_new_q.z();
+        newPose.orientation.w = neighborPose_new_q.w();
+
+        Pose deltaPose = Pose();
+
+        Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
+        Eigen::Quaterniond newPose_q(newPose.orientation.w, newPose.orientation.x, newPose.orientation.y, newPose.orientation.z);
+        Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
+        Eigen::Vector3d deltaPose_v (newPose.position.x - nowPose.position.x, 
+            newPose.position.y - nowPose.position.y, newPose.position.z - nowPose.position.z);
+        Eigen::Vector3d result_v = nowPose_R.transpose()*deltaPose_v;
+        deltaPose.position.x = result_v.x();
+        deltaPose.position.y = result_v.y();
+        deltaPose.position.z = result_v.z();
+
+        Eigen::Quaterniond deltaPose_q = nowPose_q.inverse()*newPose_q;
+        Eigen::Vector3d euler = deltaPose_q.toRotationMatrix().eulerAngles(0, 1, 2);
+        Eigen::Quaterniond q = Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX())
+        * Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitY())
+        * Eigen::AngleAxisd(euler.z(), Eigen::Vector3d::UnitZ());
+        deltaPose_q = q;
+        deltaPose.orientation.x = deltaPose_q.x();
+        deltaPose.orientation.y = deltaPose_q.y();
+        deltaPose.orientation.z = deltaPose_q.z();
+        deltaPose.orientation.w = deltaPose_q.w();
+
+        double *temp_info_matrix = new double[21]{0.05,0,0,0,0,0,
+                                                    0.05,0,0,0,0,
+                                                      0.05,0,0,0,
+                                                        0.0,0,0,
+                                                          0.0,0, 
+                                                            0.0};
+        InsertConstraint_icp(i, j, deltaPose, temp_info_matrix);
+        ConstraintCheck.insert(constraint_check_id);
+        // add oppsite constraint
+        constraint_check_id = j+0.00001*i;
+        ConstraintCheck.insert(constraint_check_id);
+
+        ROS_INFO("Node %zu neighbor to %zu, add constraint", i+1, j+1);
+      }
+      //break; //only try i with i+1
+    }
+  }
+
+}
+
 
 
 // constraint building, sub nodemap poses callback, constraint tag to ConstraintGraph
@@ -251,12 +405,10 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
   ROS_INFO("get pose array sized %zu", pose_array->poses.size());
   unsigned node_id_now = pose_array->poses.size();
   
-  /*
   // for pose array based constraint visualization
   m_Poses.clear();
   for (int i=0; i<pose_array->poses.size(); ++i)
     m_Poses.push_back(pose_array->poses[i]);
-  */
 
   // pose graph add vertex 
   for (unsigned i=0; i<node_id_now; ++i){
@@ -291,94 +443,10 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
     InsertConstraint(i-1, i, deltaPose, temp_info_matrix);
   }
 
-  /*
-  // pose graph add constraint: pose and next pose from icp
-  for (unsigned i=0; i<node_id_now; ++i){
-    if (i==0) continue; //no edge
-    // search now pose and map
-    auto nodeNow = NodeGraph.find(i+1);
-    if (nodeNow==NodeGraph.end()) continue;
-    PCLPointCloud nowMap = *(nodeNow->second.second);
-    Pose nowPose = pose_array->poses[i];
-
-    //pc from now frame to world frame
-    Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
-    Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
-    Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
-    Eigen::Matrix4d Trans_now; 
-    Trans_now.setIdentity();
-    Trans_now.block<3,3>(0,0) = nowPose_R;
-    Trans_now.block<3,1>(0,3) = nowPose_v;
-    pcl::transformPointCloud(nowMap, nowMap, Trans_now);
-
-    //search close neighbor pose
-    for (unsigned j=i-1; j<node_id_now; ++j){
-      if (j==i|j==i+1) continue;  // duplicate
-
-      // search neighbor pose and map
-      auto nodeNeighbor = NodeGraph.find(j+1);
-      if (nodeNeighbor==NodeGraph.end()) continue; //no nodemap found
-      PCLPointCloud neighborMap = *(nodeNeighbor->second.second);
-      Pose neighborPose = pose_array->poses[j];
-      //if (TwoPoseDistance(nowPose,neighborPose)>1.0) continue; //distance threshold = 1m
-
-      //pc from neighbor frame to world frame
-      Eigen::Quaterniond neighborPose_q(neighborPose.orientation.w, neighborPose.orientation.x, neighborPose.orientation.y, neighborPose.orientation.z);
-      Eigen::Vector3d neighborPose_v(neighborPose.position.x, neighborPose.position.y, neighborPose.position.z);
-      Eigen::Matrix3d neighborPose_R = neighborPose_q.toRotationMatrix();
-      Eigen::Matrix4d Trans_neighbor; 
-      Trans_neighbor.setIdentity();
-      Trans_neighbor.block<3,3>(0,0) = neighborPose_R;
-      Trans_neighbor.block<3,1>(0,3) = neighborPose_v;
-      pcl::transformPointCloud(neighborMap, neighborMap, Trans_neighbor);
-
-      // find transforamtion from  icp
-      Eigen::Matrix4d transformation;
-      if (PairwiseICP_T(nowMap.makeShared(), neighborMap.makeShared(), transformation)){
-        Eigen::Matrix4d neighborPose_new = transformation*Trans_neighbor;
-        Eigen::Matrix3d neighborPose_new_R = neighborPose_new.block<3,3>(0,0);
-        Eigen::Vector3d neighborPose_new_v = neighborPose_new.block<3,1>(0,3);
-        Eigen::Quaterniond neighborPose_new_q (neighborPose_new_R);
-
-        ROS_INFO("p2 before: %f, %f, %f.", neighborPose_v.x(), neighborPose_v.y(),neighborPose_v.z());
-        ROS_INFO("p2 after: %f, %f, %f.", neighborPose_new_v.x(), neighborPose_new_v.y(),neighborPose_new_v.z());
-
-        Pose newPose = Pose();
-        newPose.position.x = neighborPose_new_v.x();
-        newPose.position.y = neighborPose_new_v.y();
-        newPose.position.z = neighborPose_new_v.z();
-        newPose.orientation.x = neighborPose_new_q.x();
-        newPose.orientation.y = neighborPose_new_q.y();
-        newPose.orientation.z = neighborPose_new_q.z();
-        newPose.orientation.w = neighborPose_new_q.w();
-
-        Pose deltaPose = Pose();
-
-        Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
-        Eigen::Quaterniond newPose_q(newPose.orientation.w, newPose.orientation.x, newPose.orientation.y, newPose.orientation.z);
-        Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
-        Eigen::Vector3d deltaPose_v (newPose.position.x - nowPose.position.x, 
-            newPose.position.y - nowPose.position.y, newPose.position.z - nowPose.position.z);
-        Eigen::Vector3d result_v = nowPose_R.transpose()*deltaPose_v;
-        deltaPose.position.x = result_v.x();
-        deltaPose.position.y = result_v.y();
-        deltaPose.position.z = result_v.z();
-
-        Eigen::Quaterniond deltaPose_q = nowPose_q.inverse()*newPose_q;
-        deltaPose.orientation.x = deltaPose_q.x();
-        deltaPose.orientation.y = deltaPose_q.y();
-        deltaPose.orientation.z = deltaPose_q.z();
-        deltaPose.orientation.w = deltaPose_q.w();
-
-        double *temp_info_matrix = new double[21]{0.01,0,0,0,0,0,0.01,0,0,0,0,0.01,0,0,0,40,0,0,40,0,40};
-        InsertConstraint(i, j, deltaPose, temp_info_matrix);
-
-        ROS_INFO("Node %zu neighbor to %zu, add constraint", i+1, j+1);
-      }
-      break; //only try i with i+1
-    }
+  // pose graph add constraint: neighbor pose from icp
+  for (auto iter=constraints_icp.begin(); iter!=constraints_icp.end(); ++iter){
+    constraints.push_back(*iter);
   }
-  */
 
   std::cout << "Finished pose graph building" << '\n';
   std::cout << "Number of poses: " << poses.size() << '\n';
@@ -396,9 +464,25 @@ void Submap3dOptimizer::subNodePoseCallback(const geometry_msgs::PoseArray::Cons
   // clean pose graph
   poses.clear();
   constraints.clear();
-  ConstraintCheck.clear();
+  //ConstraintCheck.clear();
 }
 
+bool Submap3dOptimizer::TwoVectorDistance3d(const Eigen::Vector3d &pose_target, const Eigen::Vector3d &pose_source){
+  if (abs(pose_target.z() - pose_source.z())>0.1) return false; //z should not fly
+  float x_delta = pow(pose_target.x() - pose_source.x(), 2);
+  float y_delta = pow(pose_target.y() - pose_source.y(), 2);
+  if (sqrt(x_delta+y_delta)>0.5) return false;
+  return true;
+}
+
+
+// Distance between two pose to determine if they are close (neighbor)
+float Submap3dOptimizer::TwoVectorDistance4f(const Eigen::Vector4f &pose_target, const Eigen::Vector4f &pose_source){
+  float x_delta = pow(pose_target.x() - pose_source.x(), 2);
+  float y_delta = pow(pose_target.y() - pose_source.y(), 2);
+  float z_delta = pow(pose_target.z() - pose_source.z(), 2);
+  return sqrt(x_delta+y_delta+z_delta);
+}
 
 // sub nodemap poses callback, constraint tag to ConstraintGraph, output .txt for testing
 /*
@@ -537,7 +621,7 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
     points.type = visualization_msgs::Marker::POINTS; 
 
     // LINE_STRIP/LINE_LIST markers use only the x component of scale, for the line width
-    line_list.scale.x = 0.025;
+    line_list.scale.x = 0.0125;
     points.scale.x = 0.025;
     points.scale.y = 0.025;
 
@@ -566,15 +650,26 @@ void Submap3dOptimizer::publishConstriant(const ros::Time& rostime){
       p1.x = p1_iter->second.p.x();
       p1.y = p1_iter->second.p.y();
       p1.z = p1_iter->second.p.z();
-
-      Eigen::Matrix3d t_be_R = p1_iter->second.q.toRotationMatrix();
-      Eigen::Vector3d t_be_v = iter->t_be.p;
-      Eigen::Vector3d p2_v = p1_iter->second.p + t_be_R*t_be_v;//t_be_R*(p1_iter->second.p) + t_be_v;
+      
+      /*
+      // calculated p2
+      //Eigen::Matrix3d t_be_R = p1_iter->second.q.toRotationMatrix();
+      //Eigen::Vector3d t_be_v = iter->t_be.p;
+      //Eigen::Vector3d p2_v = p1_iter->second.p + t_be_R*t_be_v;//t_be_R*(p1_iter->second.p) + t_be_v;
 
       geometry_msgs::Point p2;
       p2.x = p2_v.x();
       p2.y = p2_v.y();
       p2.z = p2_v.z(); 
+      */
+
+      // direct draw p2
+      auto p2_iter = poses.find(iter->id_end);
+      if (p2_iter == poses.end()) continue;  //begin pose not found
+      geometry_msgs::Point p2;
+      p2.x = p2_iter->second.p.x();
+      p2.y = p2_iter->second.p.y();
+      p2.z = p2_iter->second.p.z();
 
       // Line list is pink
       std_msgs::ColorRGBA c;
@@ -667,21 +762,21 @@ bool Submap3dOptimizer::PairwiseICP_T(const PCLPointCloud::Ptr &cloud_target, co
   //publishDebugPC();
   //m_global_pc_map_temp->clear();
 
-	pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
+	pcl::GeneralizedIterativeClosestPoint<PCLPoint, PCLPoint> icp;
   // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
-	icp.setMaxCorrespondenceDistance(0.3); //ignore the point out of distance(m)
+	//icp.setMaxCorrespondenceDistance(0.3); //ignore the point out of distance(m)
   // Set the transformation epsilon (criterion 2)
-	icp.setTransformationEpsilon(1e-6); //converge criterion
+	//icp.setTransformationEpsilon(1e-6); //converge criterion
   // Set the euclidean distance difference epsilon (criterion 3)
-	icp.setEuclideanFitnessEpsilon(1); //diverge threshold
+	//icp.setEuclideanFitnessEpsilon(1); //diverge threshold
   // Set the maximum number of iterations (criterion 1)
-	icp.setMaximumIterations (5);
+	icp.setMaximumIterations (20);
 	icp.setInputSource (src);
 	icp.setInputTarget (tgt);
 	icp.align (*src_aligned);
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  ROS_INFO("After registration using ICP pointcloud, time cost: %f(s), converged: %d", total_elapsed, icp.hasConverged());
+  ROS_INFO("After registration using ICP pointcloud, time cost: %f(s), converged: %d, score: %f", total_elapsed, icp.hasConverged(), icp.getFitnessScore());
 
   if (icp.hasConverged()){
     output_trans = icp.getFinalTransformation().cast<double>();
@@ -719,12 +814,6 @@ bool Submap3dOptimizer::InsertVertex(const int &id, const Pose &vertex){
 
 // Pose-graph insert a constraint edge
 void Submap3dOptimizer::InsertConstraint(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix) {
-  double constraint_check_id = id_begin + 0.00001*id_end;
-  if (ConstraintCheck.find(constraint_check_id) != ConstraintCheck.end()) {
-    ROS_WARN("Duplicate constraint with ID: %f", constraint_check_id);
-    return;
-  }
-
   ceres::examples::Constraint3d constraint;
   constraint.id_begin = id_begin;
   constraint.id_end = id_end;
@@ -749,8 +838,35 @@ void Submap3dOptimizer::InsertConstraint(const int &id_begin, const int &id_end,
     }
   }
   constraints.push_back(constraint);
-  ConstraintCheck.insert(constraint_check_id);
 }
 
+
+// Pose-graph insert a constraint edge
+void Submap3dOptimizer::InsertConstraint_icp(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix) {
+  ceres::examples::Constraint3d constraint;
+  constraint.id_begin = id_begin;
+  constraint.id_end = id_end;
+
+  constraint.t_be.p.x() = t_be.position.x;
+  constraint.t_be.p.y() = t_be.position.y;
+  constraint.t_be.p.z() = t_be.position.z;
+
+  constraint.t_be.q.w() = t_be.orientation.w;
+  constraint.t_be.q.x() = t_be.orientation.x;
+  constraint.t_be.q.y() = t_be.orientation.y;
+  constraint.t_be.q.z() = t_be.orientation.z;
+
+  int counter = 0;
+  for (int i = 0; i < 6; ++i) {
+    for (int j = i; j < 6; ++j) {
+      constraint.information(i, j) = info_matrix[counter];
+      ++counter;
+      if (i != j) {
+        constraint.information(j, i) = constraint.information(i, j);
+      }
+    }
+  }
+  constraints_icp.push_back(constraint);
+}
 
 }

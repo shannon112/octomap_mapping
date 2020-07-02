@@ -64,6 +64,8 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/registration/icp.h>
+#include <pcl/registration/gicp.h>
+
 
 #include <tf/transform_listener.h>
 #include <tf/message_filter.h>
@@ -109,6 +111,7 @@ public:
   virtual void constraintCallback(const visualization_msgs::MarkerArray::ConstPtr& pose_array);
   virtual void subSubmapPoseCallback(const cartographer_ros_msgs::SubmapList::ConstPtr& pose);
   virtual void subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
+  virtual void subNodeEdgeCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
   virtual void subNodeMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
   virtual void subSubmapMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
 
@@ -123,6 +126,9 @@ protected:
   virtual float TwoPoseDistance(const Pose &pose_target, const Pose &pose_source);
   virtual bool InsertVertex(const int &id, const Pose &vertex);
   virtual void InsertConstraint(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix);
+  virtual void InsertConstraint_icp(const int &id_begin, const int &id_end, const Pose &t_be, const double* info_matrix);
+  virtual float TwoVectorDistance4f(const Eigen::Vector4f &pose_target, const Eigen::Vector4f &pose_source);
+  virtual bool TwoVectorDistance3d(const Eigen::Vector3d &pose_target, const Eigen::Vector3d &pose_source);
 
   ros::NodeHandle m_nh;
   ros::NodeHandle m_nh_private;
@@ -131,11 +137,13 @@ protected:
   ros::Subscriber m_pointCloudSub;
 
   message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseArraySub;
+  message_filters::Subscriber<geometry_msgs::PoseArray>* m_poseEdgeSub;
   message_filters::Subscriber<cartographer_ros_msgs::SubmapList>* m_poseStampedSub;
   message_filters::Subscriber<octomap_server::PosePointCloud2>* m_submapSub;
   message_filters::Subscriber<octomap_server::PosePointCloud2>* m_nodemapSub;
 
   tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseArraySub;
+  tf::MessageFilter<geometry_msgs::PoseArray>* m_tfPoseEdgeSub;
   tf::MessageFilter<cartographer_ros_msgs::SubmapList>* m_tfPoseStampedSub;
   tf::MessageFilter<octomap_server::PosePointCloud2>* m_tfSubmapSub;
   tf::MessageFilter<octomap_server::PosePointCloud2>* m_tfNodemapSub;
@@ -191,11 +199,13 @@ protected:
   PCLPointCloud::Ptr m_global_pc_map;
   PCLPointCloud::Ptr m_global_pc_map_temp;
 
+  bool isSolved;
   std::vector<Pose> m_Poses; //for debug
   std::unordered_map<int, PoseCloud> NodeGraph;
   std::unordered_set<double> ConstraintCheck;
   ceres::examples::MapOfPoses poses;
   ceres::examples::VectorOfConstraints constraints;
+  ceres::examples::VectorOfConstraints constraints_icp;
 
   ros::WallTime previousTime;
 };

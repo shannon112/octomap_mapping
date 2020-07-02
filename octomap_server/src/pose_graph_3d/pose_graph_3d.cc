@@ -37,8 +37,9 @@ namespace examples {
 // graph constraints.
 void BuildOptimizationProblem(const VectorOfConstraints& constraints,
                               MapOfPoses* poses, ceres::Problem* problem) {
-  CHECK(poses != NULL);
-  CHECK(problem != NULL);
+  if(poses == NULL) return;
+  if(problem == NULL) return;
+  if (poses->size() == 0) return;
   if (constraints.empty()) {
     LOG(INFO) << "No constraints, no problem to optimize.";
     return;
@@ -93,7 +94,7 @@ void BuildOptimizationProblem(const VectorOfConstraints& constraints,
 
 // Returns true if the solve was successful.
 bool SolveOptimizationProblem(ceres::Problem* problem) {
-  CHECK(problem != NULL);
+  if(problem == NULL) false;
 
   ceres::Solver::Options options;
   options.max_num_iterations = 200;

@@ -25,6 +25,7 @@ set(PACKAGE_DEPENDENCIES
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})
 find_package(Ceres REQUIRED)
 find_package(octomap REQUIRED)
+find_package(PCL 1.7 REQUIRED)
 add_definitions(-DOCTOMAP_NODEBUGOUT)
 
 include_directories(

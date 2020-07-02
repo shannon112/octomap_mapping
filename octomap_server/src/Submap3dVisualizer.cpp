@@ -26,6 +26,8 @@ Submap3dVisualizer::Submap3dVisualizer(const ros::NodeHandle private_nh_, const 
   m_SizePoses(0),
   m_global_pc_map_temp(new PCLPointCloud),
   m_global_pc_map(new PCLPointCloud),
+  m_local_pc_map(new PCLPointCloud),
+
   m_octree(NULL),
   m_maxRange(-1.0),
   m_worldFrameId("/map"), m_baseFrameId("base_footprint"),
@@ -226,11 +228,13 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
 
   //update global map, tuning with live pose_array from cartographer
+  int counter = 0;
   for (unsigned i=0; i<node_id_now; ++i){
     auto nodeExist = NodeGraph.find(i+1);
     if (nodeExist!=NodeGraph.end()){
       PCLPointCloud temp = *(nodeExist->second.second);
       Pose nowPose = pose_array->poses[i];
+
       Eigen::Quaterniond nowPose_q(nowPose.orientation.w, nowPose.orientation.x, nowPose.orientation.y, nowPose.orientation.z);
       Eigen::Vector3d nowPose_v(nowPose.position.x, nowPose.position.y, nowPose.position.z);
       Eigen::Matrix3d nowPose_R = nowPose_q.toRotationMatrix();
@@ -240,10 +244,82 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
       Trans.block<3,1>(0,3) = nowPose_v;
       pcl::transformPointCloud(temp, temp, Trans);
 
+      //centroid of global pc
+      //Eigen::Vector4f centroid; 
+      //pcl::compute3DCentroid(temp,centroid);
+      //GlobalGraph.push_back(Global(centroid, temp));
+
       //insert nodemap to pointcloud map
+      /*
+      if (counter%2==0) *m_local_pc_map+=temp;
+      else{
+        PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
+        if (PairwiseICP(m_local_pc_map, temp.makeShared(), m_local_new)) *m_global_pc_map += *m_local_new;
+        else {
+          *m_global_pc_map += temp;
+          *m_global_pc_map += *m_local_pc_map;
+        }
+        m_local_pc_map->clear();
+      }
+      ++counter;
+      */
       *m_global_pc_map += temp;
     }
   }
+
+  /*
+  //search neighbor and icp merge
+  for (auto iter=GlobalGraph.begin(); iter!=GlobalGraph.end(); ++iter){
+    // find one which is not integrated yet
+    if (Integrated.find(iter-GlobalGraph.begin())!=Integrated.end() ) continue; //that map is already integrated
+    Integrated.insert(iter-GlobalGraph.begin());
+
+    Eigen::Vector4f centroidNow = iter->first;
+    PCLPointCloud::Ptr pcNow = (iter->second).makeShared();
+    *m_local_pc_map+= *pcNow;
+
+    // iteratively find neighbor
+    int lastmapId = iter - GlobalGraph.begin();
+    for (auto iterN=GlobalGraph.begin(); iterN!=GlobalGraph.end(); ++iterN){
+      if (Integrated.find(iterN-GlobalGraph.begin())!=Integrated.end() ) continue; //that map is already integrated
+
+      Eigen::Vector4f centroidNeighbor = iterN->first;
+      // see if it is really close enough
+      if (TwoVectorDistance(centroidNeighbor, centroidNow) < 1){
+        std::cout<<"@find "<< iter-GlobalGraph.begin() <<"neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
+
+        // see if that is too close
+        if (abs(iterN-GlobalGraph.begin() - lastmapId)<5) continue;
+        lastmapId = iterN-GlobalGraph.begin();
+
+        PCLPointCloud::Ptr pcNeighbor = (iterN->second).makeShared();
+
+        PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
+        if (PairwiseICP(m_local_pc_map, pcNeighbor, m_local_new)==true) {
+          m_local_pc_map = m_local_new;
+          std::cout<<"@integrated "<< iter-GlobalGraph.begin() <<" and its neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
+          Integrated.insert(iterN-GlobalGraph.begin());
+        }
+        else  {
+          std::cout<<"@abort "<< iterN-GlobalGraph.begin()<<std::endl;
+        }
+
+        // voxel filter
+        PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
+        pcl::VoxelGrid<PCLPoint> voxel_filter;
+        voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
+        voxel_filter.setInputCloud(m_local_pc_map);
+        voxel_filter.filter(*vx_pc);
+        m_local_pc_map = vx_pc;
+
+        //*m_local_pc_map += iterN->second; //debug
+      }
+    }
+    *m_global_pc_map += *m_local_pc_map;
+    m_local_pc_map->clear();
+  }
+  */
+
 
   //publish pointcloud globalmap
   if ((ros::WallTime::now()-previousTime).toSec() > 2){
@@ -251,7 +327,18 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
     publishPCmap3d(pose_array->header.stamp);
   }
   m_global_pc_map->clear();
+  GlobalGraph.clear();
+  Integrated.clear();
   ROS_INFO("Cleared pointcloud map");
+}
+
+
+// Distance between two pose to determine if they are close (neighbor)
+float Submap3dVisualizer::TwoVectorDistance(const Eigen::Vector4f &pose_target, const Eigen::Vector4f &pose_source){
+  float x_delta = pow(pose_target.x() - pose_source.x(), 2);
+  float y_delta = pow(pose_target.y() - pose_source.y(), 2);
+  float z_delta = pow(pose_target.z() - pose_source.z(), 2);
+  return sqrt(x_delta+y_delta+z_delta);
 }
 
 // octomap map building
@@ -351,7 +438,7 @@ void Submap3dVisualizer::subNodePoseCallback(const geometry_msgs::PoseArray::Con
 */
 }
 
-void Submap3dVisualizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
+bool Submap3dVisualizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
 {
   ros::WallTime startTime = ros::WallTime::now();
 	PCLPointCloud::Ptr src(new PCLPointCloud);
@@ -361,25 +448,23 @@ void Submap3dVisualizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, con
 	src = cloud_source;
  
 	pcl::IterativeClosestPoint<PCLPoint, PCLPoint> icp;
-	icp.setMaxCorrespondenceDistance(0.3); //ignore the point out of distance(m)
+	icp.setMaxCorrespondenceDistance(1.5); //ignore the point out of distance(m)
 	icp.setTransformationEpsilon(1e-6); //converge criterion
 	icp.setEuclideanFitnessEpsilon(1); //diverge threshold
-	icp.setMaximumIterations (5);
+	icp.setMaximumIterations (20);
 	icp.setInputSource (src);
 	icp.setInputTarget (tgt);
-	icp.align (*output);
+	icp.align (*src);
 	
   if (icp.hasConverged()){
-    output->resize(tgt->size()+output->size());
-    for (int i=0;i<tgt->size();i++)
-    {
-      output->push_back(tgt->points[i]);
-    }
-  }else{
+    *output += *src;
     *output += *tgt;
+  }else{
+    return false;
   }
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_INFO("After registration using ICP pointcloud size: %d, time cost: %f(s), converged: %d", output->size(), total_elapsed, icp.hasConverged());
+  return true;
 }
 
 // posepointcloud input callback,  insert Node to NodeGraph

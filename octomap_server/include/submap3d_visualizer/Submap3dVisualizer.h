@@ -35,6 +35,7 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <std_msgs/ColorRGBA.h>
 #include <unordered_map>
+#include <unordered_set>
 // #include <moveit_msgs/CollisionObject.h>
 // #include <moveit_msgs/CollisionMap.h>
 
@@ -57,6 +58,7 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/registration/icp.h>
+#include <pcl/filters/voxel_grid.h>
 
 #include <tf/transform_listener.h>
 #include <tf/message_filter.h>
@@ -95,6 +97,7 @@ public:
   typedef geometry_msgs::Pose Pose;
   typedef std::pair<Pose,PCLPointCloud::Ptr> PoseCloud;
   typedef std::pair<int,PoseCloud> Node;
+  typedef std::pair<Eigen::Vector4f, PCLPointCloud> Global;
 
   Submap3dVisualizer(const ros::NodeHandle private_nh_ = ros::NodeHandle("~"), const ros::NodeHandle &nh_ = ros::NodeHandle());
   virtual ~Submap3dVisualizer();
@@ -107,6 +110,8 @@ public:
   virtual void insertSubmap3dposeCallback(const geometry_msgs::PoseArray::ConstPtr& pose);
   virtual void subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array);
   virtual void subNodeMapCallback(const octomap_server::PosePointCloud2::ConstPtr& pose_pointcloud);
+  
+  virtual float TwoVectorDistance(const Eigen::Vector4f &pose_target, const Eigen::Vector4f &pose_source);
 
 protected:
   inline static void updateMinKey(const octomap::OcTreeKey& in, octomap::OcTreeKey& min) {
@@ -134,7 +139,7 @@ protected:
   void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   virtual void publishOCTmap3d(const ros::Time& rostime = ros::Time::now());
   virtual void publishPCmap3d(const ros::Time& rostime = ros::Time::now());
-  virtual void PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
+  virtual bool PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output );
 
   /**
   * @brief update occupancy map with a scan labeled as ground and nonground.
@@ -285,9 +290,12 @@ protected:
   std::vector<PCLPointCloud::Ptr> m_local_pc_maps;
 
   PCLPointCloud::Ptr m_global_pc_map;
+  PCLPointCloud::Ptr m_local_pc_map;
   PCLPointCloud::Ptr m_global_pc_map_temp;
 
   std::unordered_map<int, PoseCloud> NodeGraph;
+  std::unordered_set<int> Integrated;
+  std::vector<Global> GlobalGraph;
 
   ros::WallTime previousTime;
 };

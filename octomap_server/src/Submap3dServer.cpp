@@ -310,6 +310,14 @@ void Submap3dServer::insertPoseCallback(const geometry_msgs::PoseArray::ConstPtr
     pcl::transformPointCloud(*vx_pc, *transformed_pc, Trans_inverse);
     //pcl::transformPointCloud(*m_local_pc_map, *m_local_pc_map, Trans);
 
+    //centroid of local pc
+    Eigen::Vector4f centroid; 
+    pcl::compute3DCentroid(*transformed_pc,centroid);
+    if (centroid.y() >0.05 || centroid.y()< -0.05 || centroid.x()>2 || centroid.x()<-2) {
+      std::cout<<"aborted "<<m_SizePoses-1<<std::endl;
+      m_local_pc_map->clear();
+    }
+
     // publish 3dnode_list (submap pair with pose)
     publishNodemap3d(latest_pa_stamp, transformed_pc);
 
@@ -432,10 +440,12 @@ void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCl
   int index_now = (int)(m_SizePoses)-1; // start from 1 = corresponding len of pose array
   
   if (fPublishNodemap3d){
+    if (index_now>2670) return;
     octomap_server::PosePointCloud2 pcloud;
     pcloud.header.frame_id = m_worldFrameId;//m_worldFrameId;//
     pcloud.header.stamp = rostime;
     pcloud.node_id = index_now;
+
     pcl::toROSMsg (*nodemap, pcloud.cloud);
     m_nodemap3dPub.publish(pcloud);
     ROS_INFO("--------Published 3dnode_list %d--------", index_now);
