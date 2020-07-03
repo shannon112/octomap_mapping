@@ -440,7 +440,7 @@ void Submap3dServer::publishNodemap3d(const ros::Time& rostime, const PCLPointCl
   int index_now = (int)(m_SizePoses)-1; // start from 1 = corresponding len of pose array
   
   if (fPublishNodemap3d){
-    if (index_now>2670) return;
+    if (index_now>2640) return;
     octomap_server::PosePointCloud2 pcloud;
     pcloud.header.frame_id = m_worldFrameId;//m_worldFrameId;//
     pcloud.header.stamp = rostime;

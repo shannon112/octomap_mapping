@@ -152,8 +152,8 @@ Submap3dOptimizer::Submap3dOptimizer(const ros::NodeHandle private_nh_, const ro
   m_pointCloudSub = m_nh.subscribe<visualization_msgs::MarkerArray>("constraint_list", 5, &Submap3dOptimizer::constraintCallback, this);
 
   // subscriber
-  m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
-  m_poseEdgeSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
+  m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 1);
+  m_poseEdgeSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 1);
   //m_poseStampedSub = new message_filters::Subscriber<cartographer_ros_msgs::SubmapList> (m_nh, "submap_list", 5);
   //m_submapSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "submap3d", 5);
   m_nodemapSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "nodemap3d", 5);
@@ -320,7 +320,7 @@ void Submap3dOptimizer::subNodeEdgeCallback(const geometry_msgs::PoseArray::Cons
 
       if (TwoVectorDistance4f(centroid_now,centroid_neighbor)> 0.5) continue; //distance threshold = 1m
       ++counter;
-      if (counter%5!=0) continue;
+      if (counter%3!=0) continue;
 
       // find transforamtion from  icp
       Eigen::Matrix4d transformation;
@@ -376,9 +376,9 @@ void Submap3dOptimizer::subNodeEdgeCallback(const geometry_msgs::PoseArray::Cons
         deltaPose.orientation.z = deltaPose_q.z();
         deltaPose.orientation.w = deltaPose_q.w();
 
-        double *temp_info_matrix = new double[21]{0.05,0,0,0,0,0,
-                                                    0.05,0,0,0,0,
-                                                      0.05,0,0,0,
+        double *temp_info_matrix = new double[21]{0.075,0,0,0,0,0,
+                                                    0.075,0,0,0,0,
+                                                      0.075,0,0,0,
                                                         0.0,0,0,
                                                           0.0,0, 
                                                             0.0};

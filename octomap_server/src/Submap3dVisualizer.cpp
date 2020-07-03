@@ -231,6 +231,9 @@ void Submap3dVisualizer::refineCallback(const std_msgs::Empty::ConstPtr& command
   ROS_INFO("pointcloud get pose vector sized %zu", m_Poses.size());
   unsigned node_id_now = m_Poses.size();
 
+  m_local_pc_map->clear();
+  m_global_pc_map->clear();
+
   //update global map, tuning with live pose_array from cartographer
   int counter = 0;
   for (unsigned i=0; i<node_id_now; ++i){
@@ -252,11 +255,32 @@ void Submap3dVisualizer::refineCallback(const std_msgs::Empty::ConstPtr& command
       Eigen::Vector4f centroid; 
       pcl::compute3DCentroid(temp,centroid);
       GlobalGraph.push_back(Global(centroid, temp));
+
+      //insert nodemap to pointcloud map
+      //first map
+      /*
+      if (m_local_pc_map->size()==0) {
+        *m_local_pc_map+=temp;
+        std::cout<<"@directly  add "<<i<<std::endl;
+      }
+      //second map
+      else{
+        PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
+        // successfully merge
+        if (PairwiseICP(m_local_pc_map, temp.makeShared(), m_local_new)) {
+          m_local_pc_map = m_local_new;
+          std::cout<<"@icp  add "<<i<<std::endl;
+        } 
+        // fail to merge
+        else {
+          std::cout<<"@icp drop "<<i<<std::endl;
+        }
+        *m_global_pc_map += *m_local_pc_map;
+        m_local_pc_map->clear();
+      }
+      */
     }//if node exist
   }//for
-
-  m_local_pc_map->clear();
-  m_global_pc_map->clear();
 
   //search neighbor and icp merge
   for (auto iter=GlobalGraph.begin(); iter!=GlobalGraph.end(); ++iter){
@@ -275,7 +299,7 @@ void Submap3dVisualizer::refineCallback(const std_msgs::Empty::ConstPtr& command
 
       Eigen::Vector4f centroidNeighbor = iterN->first;
       // see if it is really close enough
-      if (TwoVectorDistance(centroidNeighbor, centroidNow) < 1){
+      if (TwoVectorDistance(centroidNeighbor, centroidNow) < 1.0){
         std::cout<<"@find ("<< iter-GlobalGraph.begin() <<"/"<<node_id_now <<") neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
 
         // see if that is too close
@@ -289,18 +313,18 @@ void Submap3dVisualizer::refineCallback(const std_msgs::Empty::ConstPtr& command
           m_local_pc_map = m_local_new;
           std::cout<<"@integrated "<< iter-GlobalGraph.begin() <<" and its neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
           Integrated.insert(iterN-GlobalGraph.begin());
+
+          // voxel filter
+          PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
+          pcl::VoxelGrid<PCLPoint> voxel_filter;
+          voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
+          voxel_filter.setInputCloud(m_local_pc_map);
+          voxel_filter.filter(*vx_pc);
+          m_local_pc_map = vx_pc;
         }
         else  {
           std::cout<<"@abort "<< iterN-GlobalGraph.begin()<<std::endl;
         }
-
-        // voxel filter
-        PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
-        pcl::VoxelGrid<PCLPoint> voxel_filter;
-        voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
-        voxel_filter.setInputCloud(m_local_pc_map);
-        voxel_filter.filter(*vx_pc);
-        m_local_pc_map = vx_pc;
 
         //*m_local_pc_map += iterN->second; //debug
       }
@@ -313,12 +337,16 @@ void Submap3dVisualizer::refineCallback(const std_msgs::Empty::ConstPtr& command
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   if ((ros::WallTime::now()-previousTime).toSec() > 2){
     previousTime = ros::WallTime::now();
-    publishPCmap3d();
-    m_global_pc_map->clear();
+    ros::Rate r(0.5); // 10 hz
+    while (ros::ok())
+    {
+      ROS_INFO("~Pub refined pointcloud map");
+      publishPCmap3d();
+      r.sleep();
+    }
     GlobalGraph.clear();
     Integrated.clear();
   }
-  ROS_INFO("Cleared pointcloud map");
 }
 
 
@@ -434,94 +462,6 @@ void Submap3dVisualizer::insertCloudCallback(const geometry_msgs::PoseArray::Con
 // temp map building, maybe good to work as service
 void Submap3dVisualizer::subNodePoseCallback(const geometry_msgs::PoseArray::ConstPtr& pose_array){
 
-  /*
-  //search neighbor and icp merge
-  for (auto iter=GlobalGraph.begin(); iter!=GlobalGraph.end(); ++iter){
-    // find one which is not integrated yet
-    if (Integrated.find(iter-GlobalGraph.begin())!=Integrated.end() ) continue; //that map is already integrated
-    Integrated.insert(iter-GlobalGraph.begin());
-
-    Eigen::Vector4f centroidNow = iter->first;
-    PCLPointCloud::Ptr pcNow = (iter->second).makeShared();
-    *m_local_pc_map+= *pcNow;
-
-    // iteratively find neighbor
-    int lastmapId = iter - GlobalGraph.begin();
-    for (auto iterN=GlobalGraph.begin(); iterN!=GlobalGraph.end(); ++iterN){
-      if (Integrated.find(iterN-GlobalGraph.begin())!=Integrated.end() ) continue; //that map is already integrated
-
-      Eigen::Vector4f centroidNeighbor = iterN->first;
-      // see if it is really close enough
-      if (TwoVectorDistance(centroidNeighbor, centroidNow) < 1){
-        std::cout<<"@find "<< iter-GlobalGraph.begin() <<"neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
-
-        // see if that is too close
-        if (abs(iterN-GlobalGraph.begin() - lastmapId)<5) continue;
-        lastmapId = iterN-GlobalGraph.begin();
-
-        PCLPointCloud::Ptr pcNeighbor = (iterN->second).makeShared();
-
-        PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
-        if (PairwiseICP(m_local_pc_map, pcNeighbor, m_local_new)==true) {
-          m_local_pc_map = m_local_new;
-          std::cout<<"@integrated "<< iter-GlobalGraph.begin() <<" and its neighbor is "<< iterN-GlobalGraph.begin()<<std::endl;
-          Integrated.insert(iterN-GlobalGraph.begin());
-        }
-        else  {
-          std::cout<<"@abort "<< iterN-GlobalGraph.begin()<<std::endl;
-        }
-
-        // voxel filter
-        PCLPointCloud::Ptr vx_pc (new PCLPointCloud);
-        pcl::VoxelGrid<PCLPoint> voxel_filter;
-        voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
-        voxel_filter.setInputCloud(m_local_pc_map);
-        voxel_filter.filter(*vx_pc);
-        m_local_pc_map = vx_pc;
-
-        //*m_local_pc_map += iterN->second; //debug
-      }
-    }
-    *m_global_pc_map += *m_local_pc_map;
-    m_local_pc_map->clear();
-  }
-  */
-
-
-
-  /*
-  //insert nodemap to pointcloud map
-  //first map
-  if (m_local_pc_map->size()==0) {
-    *m_local_pc_map+=temp;
-    std::cout<<"@directly  add "<<i<<std::endl;
-  }
-  //second map
-  else{
-    PCLPointCloud::Ptr m_local_new(new PCLPointCloud);
-    // successfully merge
-    if (PairwiseICP(m_local_pc_map, temp.makeShared(), m_local_new)) {
-      m_local_pc_map = m_local_new;
-      std::cout<<"@icp  add "<<i<<std::endl;
-
-      // voxel filter
-      PCLPointCloud vx_pc;
-      pcl::VoxelGrid<PCLPoint> voxel_filter;
-      voxel_filter.setLeafSize( 0.05, 0.05, 0.05);
-      voxel_filter.setInputCloud(m_local_pc_map);
-      voxel_filter.filter(vx_pc);
-      
-      globalmap.push_back(vx_pc.makeShared());
-
-    } 
-    // fail to merge
-    else {
-      std::cout<<"@icp drop "<<i<<std::endl;
-    }
-    m_local_pc_map->clear();
-  }
-  */
-
 }
 
 bool Submap3dVisualizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, const PCLPointCloud::Ptr &cloud_source, PCLPointCloud::Ptr &output )
@@ -537,13 +477,12 @@ bool Submap3dVisualizer::PairwiseICP(const PCLPointCloud::Ptr &cloud_target, con
 	//icp.setMaxCorrespondenceDistance(1.5); //ignore the point out of distance(m)
 	//icp.setTransformationEpsilon(1e-6); //converge criterion
 	//icp.setEuclideanFitnessEpsilon(1); //diverge threshold
-	icp.setMaximumIterations (5);
+	icp.setMaximumIterations (20);
 	icp.setInputSource (src);
 	icp.setInputTarget (tgt);
-	icp.align (*src);
+	icp.align (*output);
 	
   if (icp.hasConverged()){
-    *output += *src;
     *output += *tgt;
   }else{
     return false;
