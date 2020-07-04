@@ -152,8 +152,8 @@ Submap3dOptimizer::Submap3dOptimizer(const ros::NodeHandle private_nh_, const ro
   m_pointCloudSub = m_nh.subscribe<visualization_msgs::MarkerArray>("constraint_list", 5, &Submap3dOptimizer::constraintCallback, this);
 
   // subscriber
-  m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 1);
-  m_poseEdgeSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 1);
+  m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
+  m_poseEdgeSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
   //m_poseStampedSub = new message_filters::Subscriber<cartographer_ros_msgs::SubmapList> (m_nh, "submap_list", 5);
   //m_submapSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "submap3d", 5);
   m_nodemapSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "nodemap3d", 5);
