@@ -161,9 +161,9 @@ Submap3dVisualizer::Submap3dVisualizer(const ros::NodeHandle private_nh_, const 
   // subscriber
   m_refineSub = m_nh.subscribe<std_msgs::Empty>("to_refine_map", 5, &Submap3dVisualizer::refineCallback, this);
 
-  m_pointCloudSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
-  m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
-  m_poseStampedSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array_new", 5);
+  m_pointCloudSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
+  m_poseArraySub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
+  m_poseStampedSub = new message_filters::Subscriber<geometry_msgs::PoseArray> (m_nh, "trajectory_pose_array", 5);
   m_posePointCloudSub = new message_filters::Subscriber<octomap_server::PosePointCloud2> (m_nh, "nodemap3d", 5);
 
   // tf listener
@@ -380,7 +380,7 @@ void Submap3dVisualizer::insertSubmap3dposeCallback(const geometry_msgs::PoseArr
       Trans.setIdentity();
       Trans.block<3,3>(0,0) = nowPose_R;
       Trans.block<3,1>(0,3) = nowPose_v;
-      pcl::transformPointCloud(temp, temp, Trans);
+      //pcl::transformPointCloud(temp, temp, Trans);
 
       *m_global_pc_map += temp;
     }//if node exist

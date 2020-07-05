@@ -2,6 +2,10 @@
     <arg name="map_pkl" default="/home/shannon/Documents/master_thesis/v3/amirslam_params.pkl"/>
     <arg name="map_pbstream" default="/home/shannon/Documents/master_thesis/v3/AMIRSLAM.bag.pbstream"/>
     <arg name="map_pcd" default="/home/shannon/Documents/master_thesis/v3/AMIRSLAM.pcd"/>
+    <!--arg name="map_pcd" default="/home/shannon/Documents/master_thesis/v3/tag1/1333736793079134.pcd"/-->
+    <!--arg name="map_pcd" default="/home/shannon/Documents/master_thesis/v3/tag2/1333736793079134.pcd"/-->
+    <!--arg name="map_pcd" default="/home/shannon/Documents/master_thesis/v3/tag3/1333736793079134.pcd"/-->
+    <!--arg name="map_pcd" default="/home/shannon/Documents/master_thesis/v3/tag4/1333736793079134.pcd"/-->
     <arg name="map_ot" default="/home/shannon/Documents/master_thesis/v3/AMIRSLAM.ot"/>
 
     <!--Launch cartographer state-->
@@ -43,13 +47,13 @@
         filter_limit_negative: False
         </rosparam>
     </node>
-    <node pkg="nodelet" type="nodelet" name="statisticaloutlierremoval" args="load pcl/StatisticalOutlierRemoval pcl_manager" output="screen">
+    <!--node pkg="nodelet" type="nodelet" name="statisticaloutlierremoval" args="load pcl/StatisticalOutlierRemoval pcl_manager" output="screen">
         <remap from="~input" to="/passthrough/output" />
         <rosparam>
         stddev: 1
         mean_k: 30
         </rosparam>
-    </node>
+    </node-->
 
     <!--3D octomap view-->
     <node pkg="octomap_server" type="octomap_color_server_node" name="octomap_server">
