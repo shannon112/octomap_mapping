@@ -1,8 +1,8 @@
 <launch>
-    <arg name="map_pkl" default="/home/shannon/Documents/master_thesis/v3/amirslam_params.pkl"/>
-    <arg name="map_pbstream" default="/home/shannon/Documents/master_thesis/v3/AMIRSLAM.bag.pbstream"/>
-    <arg name="map_pcd" default="/home/shannon/Documents/master_thesis/v3/AMIRSLAM.pcd"/>
-    <arg name="map_ot" default="/home/shannon/Documents/master_thesis/v3/AMIRSLAM.ot"/>
+    <arg name="map_pkl" default="/home/shannon/Documents/master_thesis/amir_v3/amirslam_params.pkl"/>
+    <arg name="map_pbstream" default="/home/shannon/Documents/master_thesis/amir_v3/AMIRSLAM.bag.pbstream"/>
+    <arg name="map_pcd" default="/home/shannon/Documents/master_thesis/amir_v3/AMIRSLAM.pcd"/>
+    <arg name="map_ot" default="/home/shannon/Documents/master_thesis/amir_v3/AMIRSLAM.ot"/>
 
     <!--Launch cartographer state-->
     <arg name="lua_filename_local" default="mit_stata_2d.lua"/>

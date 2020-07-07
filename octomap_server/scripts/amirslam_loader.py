@@ -17,7 +17,7 @@ rospy.init_node('amirslam_loader')
 posePub = rospy.Publisher('trajectory_pose_array_new', PoseArray, queue_size=10)
 constraintPub = rospy.Publisher('constraint_list_new', MarkerArray, queue_size=10)
 
-with open('/home/shannon/Documents/master_thesis/v3/amirslam_params.pkl') as f:  # Python 3: open(..., 'rb')
+with open('/home/shannon/Documents/master_thesis/amir_v3/amirslam_params.pkl') as f:  # Python 3: open(..., 'rb')
     storedPose, storedConstraint = pickle.load(f)
 
 rate = rospy.Rate(1) # 10hz
