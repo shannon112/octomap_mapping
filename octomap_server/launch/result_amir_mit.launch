@@ -1,8 +1,8 @@
 <launch>
-    <arg name="map_pkl" default="/home/shannon/Documents/master_thesis/amir_v3/amirslam_params.pkl"/>
-    <arg name="map_pbstream" default="/home/shannon/Documents/master_thesis/amir_v3/AMIRSLAM.bag.pbstream"/>
-    <arg name="map_pcd" default="/home/shannon/Documents/master_thesis/amir_v3/AMIRSLAM.pcd"/>
-    <arg name="map_ot" default="/home/shannon/Documents/master_thesis/amir_v3/AMIRSLAM.ot"/>
+    <arg name="map_pkl" default="/home/shannon/Documents/master_thesis/MITDATASET/amir_v3/amirslam_params.pkl"/>
+    <arg name="map_pbstream" default="/home/shannon/Documents/master_thesis/MITDATASET/amir_v3/AMIRSLAM.bag.pbstream"/>
+    <arg name="map_pcd" default="/home/shannon/Documents/master_thesis/MITDATASET/amir_v3/AMIRSLAM.pcd"/>
+    <arg name="map_ot" default="/home/shannon/Documents/master_thesis/MITDATASET/amir_v3/AMIRSLAM.ot"/>
 
     <!--Launch cartographer state-->
     <arg name="lua_filename_local" default="mit_stata_2d.lua"/>
@@ -20,7 +20,9 @@
     </node>
 
     <!--Launch amir state-->
-    <node pkg="octomap_server" type="amirslam_loader.py" name="amirslam_loader"/>
+    <node pkg="octomap_server" type="amirslam_loader.py" name="amirslam_loader">
+        <param name="amirslam_state_filename" value="$(arg map_pkl)" />
+    </node>
 
     <!--Launch amir map transformation-->
     <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="0 0 0.954675 0 0 0 1 map map_3d 100" />

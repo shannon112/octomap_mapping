@@ -33,7 +33,7 @@ plt.plot(x_list_4, y_list_4,label="Filtered odometry")
 
 x_list_1 = []
 y_list_1 = []
-f = open("/home/shannon/Documents/master_thesis/rgbdv2_odom/trajectory_estimate.txt.flatten.aligned", "r") 
+f = open("/home/shannon/Documents/master_thesis/rgbdv2_odom/again/trajectory_estimate.txt.flatten.aligned", "r") 
 for line in f:
     elements = line.split(" ")
     x_list_1.append(elements[1])
